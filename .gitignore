@@ -1,0 +1,43 @@
+# Secrets
+.env
+*.env.local
+service-account.json
+*-service-account.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.python-version
+
+# Node
+node_modules/
+.next/
+frontend/node_modules/
+frontend/.next/
+
+# Google Cloud
+.gcloud/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.claude/
+
+# Logs
+*.log
+logs/
+
+# Demo data (puede contener info real)
+demo/output/
+demo/*.json
