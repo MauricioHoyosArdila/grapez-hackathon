@@ -106,46 +106,71 @@ https://www.googleapis.com/auth/adwords
 ## 4. Arquitectura del Sistema
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js)                    │
-│   OAuth Google → Firestore → Chat UI con A2UI client    │
-└───────────────────────┬─────────────────────────────────┘
-                        │ HTTP / SSE
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│              PLANNER AGENT (Orchestrator)                │
-│   Recibe objetivo → coordina sub-agentes → reporta A2UI │
-└──────┬──────────┬──────────┬──────────┬────────────────┘
-       │          │          │          │
-       ▼          ▼          ▼          ▼
-  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────┐
-  │  GA4    │ │  GTM    │ │  ADS    │ │ WEB ANALYZER │
-  │ AGENT   │ │ AGENT   │ │ AGENT   │ │    AGENT     │
-  │ (diag)  │ │ (diag)  │ │ (diag)  │ │  (Playwright)│
-  └────┬────┘ └────┬────┘ └────┬────┘ └──────┬───────┘
-       │           │           │             │
-       └─────────────────┬─────────────────┘
-                         ▼
-              ┌────────────────────┐
-              │ IMPLEMENTATION     │
-              │ AGENT              │
-              │ (aplica cambios)   │
-              └────────────────────┘
-                         │
-              GA4 Admin API + GTM API + Google Ads API
+┌──────────────────────────────────────────────────────────────┐
+│                     FRONTEND (Next.js 15)                     │
+│  OAuth Google → Firestore → Chat UI + A2UI Renderer custom   │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ HTTP / SSE (Agent Engine endpoint)
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│           PLANNER AGENT — Agent Engine (Vertex AI)            │
+│    LlmAgent: coordina sub-agentes via AgentTool + ParallelAgent│
+└──────┬──────────┬──────────┬────────────┬────────────────────┘
+       │ AgentTool│ AgentTool│ AgentTool  │ HTTP call
+       ▼          ▼          ▼            ▼
+  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌───────────────────────┐
+  │  GA4    │ │  GTM    │ │  ADS    │ │  WEB ANALYZER AGENT   │
+  │ AGENT   │ │ AGENT   │ │ AGENT   │ │  (Agent Engine)       │
+  │ Agent   │ │ Agent   │ │ Agent   │ │  llama HTTP → Cloud   │
+  │ Engine  │ │ Engine  │ │ Engine  │ │  Run Playwright svc   │
+  └────┬────┘ └────┬────┘ └────┬────┘ └──────────┬────────────┘
+       │           │           │                  │ HTTP POST /analyze
+       │           │           │        ┌─────────▼────────────┐
+       │           │           │        │  PLAYWRIGHT SERVICE   │
+       │           │           │        │  Cloud Run + Docker   │
+       │           │           │        │  chromium headless    │
+       │           │           │        │  2Gi RAM, port 8080   │
+       │           │           │        └──────────────────────┘
+       └───────────────────┬───┘
+                           ▼
+              ┌────────────────────────┐
+              │  IMPLEMENTATION AGENT  │
+              │  Agent Engine          │
+              │  GA4 + GTM + Ads write │
+              └────────────────────────┘
+                           │
+         GA4 Admin API + GTM API v2 + Google Ads API
+                (Python libs — tokens via ToolContext.state)
+
+INFRAESTRUCTURA GOOGLE CLOUD:
+  Agent Engine (Vertex AI) ← todos los 5 agentes Python
+  Cloud Run                ← frontend Next.js + Playwright service (docker)
+  Firestore                ← clientes, tokens cifrados, logs
+  Secret Manager           ← ENCRYPTION_KEY, GOOGLE_CLIENT_SECRET
 ```
 
+### Decisión arquitectural clave: Web Analyzer en dos capas
+
+Agent Engine **no tiene Chromium** — es un sandbox Python puro. La solución es:
+- **Web Analyzer Agent** corre en Agent Engine como los demás agentes
+- Tiene una tool `analyze_site(url)` que hace HTTP POST al **Playwright Service**
+- **Playwright Service** es un microservicio FastAPI corriendo en Cloud Run con Docker + Chromium
+- El agente orquesta la lógica; el servicio ejecuta el browser
+
+Esto mantiene toda la infraestructura en Google Cloud y resuelve la limitación del sandbox.
+
 ### Flujo completo
-1. Consultor abre la app, crea cliente con nombre y URL del sitio
-2. Conecta cuenta Google del cliente via OAuth (se guardan tokens en Firestore)
+1. Consultor crea cliente con nombre y URL del sitio → guardado en Firestore
+2. Conecta cuenta Google del cliente via OAuth → tokens encriptados en Firestore
 3. Abre chat → Planner Agent recibe el objetivo ("diagnostica el ecosistema")
-4. Planner delega en paralelo a GA4 Agent, GTM Agent, Ads Agent, Web Analyzer
-5. Cada agente usa Python code execution para llamar APIs directamente (read+write)
-6. Web Analyzer usa Playwright para crawlear el sitio y detectar dataLayer, GA4, GTM
-7. Agentes retornan hallazgos → Planner genera plan de acción
-8. Implementation Agent ejecuta cada acción paso a paso con confirmación del consultor
-9. A2UI renderiza UI dinámica en el chat (tablas de hallazgos, botones de confirmación, progress bars)
-10. Al final: reporte completo de qué se diagnosticó y qué se implementó
+4. Planner carga tokens de Firestore → los pone en `session.state`
+5. Planner activa ParallelAgent: GA4 + GTM + Ads + Web Analyzer corren en paralelo
+6. Web Analyzer Agent llama Playwright Service (Cloud Run) via HTTP → recibe dataLayer, IDs, errores
+7. GA4/GTM/Ads Agents llaman APIs directamente con tokens del session.state
+8. Planner consolida hallazgos → genera A2UI con tabla de diagnóstico
+9. Consultor confirma → Implementation Agent ejecuta cambios paso a paso
+10. Cada cambio: A2UI action_card → confirmación → ejecución → log en Firestore
+11. Reporte final A2UI summary_card
 
 ---
 
@@ -301,44 +326,88 @@ enable_auto_tagging(customer_id)
 
 ### 5.5 Web Analyzer Agent
 **Archivo**: `agents/web_analyzer_agent/agent.py`
-**Rol**: Crawlear el sitio web del cliente con Playwright para detectar implementaciones existentes de GA4/GTM/Ads y eventos del dataLayer.
+**Rol**: Orquestar el análisis del sitio web del cliente. El agente corre en Agent Engine; el browser headless corre en el Playwright Service (Cloud Run separado).
 
-**Por qué Playwright y no una API**:
-Las implementaciones de tracking están en el navegador (JavaScript). La única forma de verlas "como el usuario" es ejecutar un browser real. Playwright ejecuta Chrome headless y captura network requests, console logs, y dataLayer pushes.
+**Por qué Playwright y no HTTP requests simples**:
+Los sitios modernos renderizan con JavaScript (React, Angular, Next.js). Un HTTP request solo ve HTML estático — sin GA4, sin GTM, sin dataLayer. Se necesita un browser real porque:
+- GTM se carga via `<script>` que ejecuta JavaScript
+- El `window.dataLayer` se puebla en runtime del browser
+- Los eventos de conversión (purchase, add_to_cart) se disparan en interacciones reales
+- Consent Mode v2 se configura antes del primer tag — solo visible en browser
 
-**Herramientas**:
+**Arquitectura en dos capas (DEFINITIVA)**:
+
+```
+Web Analyzer Agent (Agent Engine)
+    ↓ tool call: analyze_site(url)
+    ↓ HTTP POST https://playwright-service-xxxx.run.app/analyze
+Playwright Service (Cloud Run + Docker + Chromium)
+    → Lanza browser headless
+    → Navega el sitio
+    → Captura dataLayer, network requests, IDs
+    → Devuelve JSON al agente
+```
+
+**Tools del agente** (llaman al Playwright Service via HTTP):
 ```python
-# Playwright tools (code execution)
-analyze_homepage(url) -> dict
-  # Detecta: GTM container ID, GA4 measurement ID, Google Ads tag
-  # Lee: window.dataLayer initial state
-  # Captura: network requests a collect.google.com, gtm.js
+@tool
+def analyze_site(url: str) -> dict:
+    """Analiza el sitio completo: GTM ID, GA4 ID, dataLayer, errores de tracking."""
 
-crawl_key_pages(url, pages=["home", "product", "cart", "checkout", "confirmation"])
-  # Navega cada página, captura dataLayer pushes
-  # Detecta eventos: page_view, view_item, add_to_cart, purchase
+@tool
+def crawl_conversion_funnel(url: str, funnel_pages: list[str]) -> dict:
+    """Navega el funnel de compra y detecta eventos en cada paso."""
 
-simulate_conversion_funnel(url)
-  # Simula el flujo completo de compra (si es ecommerce)
-  # Detecta si el evento purchase se dispara correctamente
-
-extract_datalayer_schema(url)
-  # Lista todos los eventos únicos del dataLayer
-  # Con sus parámetros y tipos de datos
-
-check_consent_mode(url)
-  # Verifica si Consent Mode v2 está implementado
-  # Lee: gtag('consent', 'default', {...})
-
-detect_tracking_errors(url)
-  # Busca: tags duplicados, eventos sin parámetros requeridos
-  # IDs incorrectos, requests fallidos
+@tool
+def check_consent_mode(url: str) -> dict:
+    """Verifica si Consent Mode v2 está implementado correctamente."""
 ```
 
-**Dependencias Python**:
+**Playwright Service — `playwright_service/`**:
 ```
-playwright==1.44+
-playwright install chromium  # necesario en setup
+playwright_service/
+├── Dockerfile           ← imagen base mcr.microsoft.com/playwright/python
+├── app.py               ← FastAPI con endpoints /analyze, /crawl, /health
+└── requirements.txt     ← fastapi, uvicorn, playwright
+```
+
+**Dockerfile**:
+```dockerfile
+FROM mcr.microsoft.com/playwright/python:v1.59.0-noble
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY app.py .
+EXPOSE 8080
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+**Deploy del Playwright Service**:
+```bash
+# Build y push a Container Registry
+docker build -t gcr.io/grapez-hackathon/playwright-service ./playwright_service
+docker push gcr.io/grapez-hackathon/playwright-service
+
+# Deploy a Cloud Run — mínimo 2Gi RAM (Chromium lo requiere)
+gcloud run deploy playwright-service \
+  --image=gcr.io/grapez-hackathon/playwright-service \
+  --region=us-central1 \
+  --memory=2Gi \
+  --timeout=120 \
+  --allow-unauthenticated
+# Guarda la URL en .env: PLAYWRIGHT_SERVICE_URL=https://playwright-service-xxxx.run.app
+```
+
+**Estructura de carpeta**:
+```
+agents/web_analyzer_agent/
+├── agent.py                 ← LlmAgent con tools que llaman al servicio HTTP
+└── tools/
+    └── playwright_tools.py  ← @tool functions que hacen HTTP POST al servicio
+playwright_service/          ← microservicio independiente (NO es un agente ADK)
+├── Dockerfile
+├── app.py
+└── requirements.txt
 ```
 
 ---
@@ -367,109 +436,189 @@ playwright install chromium  # necesario en setup
 
 ## 6. Arquitectura ADK — Cómo Construir los Agentes
 
-### Patrón base de un agente ADK
+### Imports verificados (google-adk v1.33.0 — mayo 2026)
+
+```python
+# Agentes
+from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent, LoopAgent
+
+# Tools
+from google.adk.tools import agent_tool          # AgentTool — sub-agente como tool
+from google.adk.tools import FunctionTool, ToolContext
+
+# Skills
+from google.adk.skills import load_skill_from_dir
+from google.adk.tools import skill_toolset       # SkillToolset
+
+# Auth
+from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
+```
+
+> **IMPORTANTE**: `UnsafeLocalCodeExecutor` existe pero es **solo para desarrollo local**.
+> En Agent Engine no funciona — el sandbox no permite procesos externos.
+> En este proyecto NO se usa code execution del ADK: los agentes usan `@tool` functions
+> normales que llaman las APIs de Google directamente con `google-analytics-admin`, etc.
+
+### Patrón base de un agente (GA4 Agent como ejemplo)
+
 ```python
 # agents/ga4_agent/agent.py
-from google.adk.agents import Agent
-from google.adk.tools import SkillToolset
-from google.adk.code_executors import UnsafeLocalCodeExecutor
-
-# Cargar skills (buscar en MCP Market cuando llegues a este agente)
-skills = load_skills_from_directory("./skills/")
-
-# Herramientas propias del agente
-from .tools.ga4_tools import (
-    list_properties,
-    get_property_details,
-    list_conversions,
-    # ... etc
+from google.adk.agents import LlmAgent
+from .tools.ga4_admin_tools import (
+    list_accounts, list_properties, get_property_details,
+    list_conversions, list_custom_events, check_enhanced_measurement,
+    create_conversion_event, update_data_retention,
 )
+from .tools.ga4_data_tools import get_event_count_last_30_days
 
-description = """
-Especialista en diagnóstico y configuración de Google Analytics 4.
-Audita propiedades GA4, identifica problemas de implementación y aplica correcciones.
-"""
-
-instruction = """
+root_agent = LlmAgent(
+    model="gemini-3-flash-preview",
+    name="ga4_agent",
+    description="Especialista en diagnóstico y configuración de Google Analytics 4.",
+    instruction="""
 Cuando diagnoses una propiedad GA4:
 1. Lista todas las propiedades disponibles para el cliente
 2. Para cada propiedad: verifica streams, eventos, conversiones, dimensiones
-3. Identifica gaps comparando contra el checklist de mejores prácticas
-4. Genera reporte estructurado con: ✅ correcto, ⚠️ mejorable, ❌ crítico
-5. Propone acciones concretas ordenadas por impacto
-
-Usa SIEMPRE el contexto del sitio web del cliente (URL, industria) para personalizar el diagnóstico.
-Cuando implementes cambios, confirma el impacto antes de ejecutar.
-"""
-
-tools = [list_properties, get_property_details, list_conversions, ...]
-
-skill_toolset = SkillToolset(
-    skills=skills,
-    code_executor=UnsafeLocalCodeExecutor(),
-    additional_tools=tools,
-)
-
-root_agent = Agent(
-    model="gemini-3-flash-preview",
-    name="ga4_agent",
-    description=description,
-    instruction=instruction,
-    tools=[skill_toolset],
+3. Clasifica hallazgos: ✅ correcto | ⚠️ mejorable | ❌ crítico
+4. Propone acciones concretas ordenadas por impacto
+""",
+    tools=[
+        list_accounts, list_properties, get_property_details,
+        list_conversions, list_custom_events, check_enhanced_measurement,
+        create_conversion_event, update_data_retention,
+        get_event_count_last_30_days,
+    ],
 )
 ```
 
-### Patrón de tool con code execution (APIs directamente)
+### Patrón de tool con FunctionTool (@tool decorator)
+
 ```python
-# agents/ga4_agent/tools/ga4_tools.py
-from google.adk.tools import tool
+# agents/ga4_agent/tools/ga4_admin_tools.py
+from google.adk.tools import tool, ToolContext
 from google.analytics.admin import AnalyticsAdminServiceClient
 from google.oauth2.credentials import Credentials
+import os
 
 @tool
-def list_properties(account_id: str, access_token: str, refresh_token: str) -> dict:
+def list_properties(account_id: str, tool_context: ToolContext) -> dict:
     """
     Lista todas las propiedades GA4 de una cuenta.
-    
+
     Args:
-        account_id: ID de la cuenta de GA4 (ej: "123456789")
-        access_token: Token OAuth del cliente
-        refresh_token: Refresh token OAuth del cliente
-    
+        account_id: ID de la cuenta GA4 (ej: "123456789")
+        tool_context: Contexto de sesión — contiene access_token y refresh_token
+
     Returns:
         dict con lista de propiedades y sus detalles básicos
     """
+    access_token = tool_context.state.get("access_token")
+    refresh_token = tool_context.state.get("refresh_token")
+
     credentials = Credentials(
         token=access_token,
         refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
     )
     client = AnalyticsAdminServiceClient(credentials=credentials)
-    properties = client.list_properties(filter=f"parent:accounts/{account_id}")
-    return {"properties": [{"id": p.name, "display_name": p.display_name} for p in properties]}
+    props = client.list_properties(filter=f"parent:accounts/{account_id}")
+    return {"properties": [{"id": p.name, "display_name": p.display_name} for p in props]}
 ```
 
-### Por qué code execution en vez de MCP
-Los MCP servers disponibles (google-ads-mcp, gtm-mcp) son **solo lectura** en su configuración por defecto. Para implementar cambios necesitamos:
+### Patrón del Planner Agent (orquestador con AgentTool + ParallelAgent)
+
+```python
+# agents/planner_agent/agent.py
+from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent
+from google.adk.tools import agent_tool, ToolContext
+from google.cloud import firestore
+from cryptography.fernet import Fernet
+import os
+
+# Importar los sub-agentes ya construidos
+from agents.ga4_agent.agent import root_agent as ga4_agent
+from agents.gtm_agent.agent import root_agent as gtm_agent
+from agents.ads_agent.agent import root_agent as ads_agent
+from agents.web_analyzer_agent.agent import root_agent as web_analyzer_agent
+from agents.implementation_agent.agent import root_agent as impl_agent
+
+# Envolver como AgentTools para llamada explícita y controlada
+ga4_tool = agent_tool.AgentTool(agent=ga4_agent)
+gtm_tool = agent_tool.AgentTool(agent=gtm_agent)
+ads_tool = agent_tool.AgentTool(agent=ads_agent)
+web_tool = agent_tool.AgentTool(agent=web_analyzer_agent)
+impl_tool = agent_tool.AgentTool(agent=impl_agent)
+
+@tool
+def load_client_tokens(client_id: str, tool_context: ToolContext) -> dict:
+    """Carga y descifra los tokens OAuth del cliente desde Firestore."""
+    db = firestore.Client()
+    doc = db.collection("clients").document(client_id).collection("google_tokens").document("current").get()
+    if not doc.exists:
+        return {"error": "Cliente no conectado. Solicita al consultor que conecte la cuenta Google."}
+
+    fernet = Fernet(os.environ["ENCRYPTION_KEY"].encode())
+    data = doc.to_dict()
+    access_token = fernet.decrypt(data["access_token"].encode()).decode()
+    refresh_token = fernet.decrypt(data["refresh_token"].encode()).decode()
+
+    # Guardar en session.state para que todos los sub-agentes los lean via ToolContext
+    tool_context.state["access_token"] = access_token
+    tool_context.state["refresh_token"] = refresh_token
+    tool_context.state["client_id"] = client_id
+    return {"status": "tokens_loaded"}
+
+root_agent = LlmAgent(
+    model="gemini-3-flash-preview",
+    name="planner_agent",
+    description="Orquestador del ecosistema de medición de Grapez Studio.",
+    instruction="""
+Eres el coordinador del ecosistema de medición de Grapez Studio.
+
+Al recibir un objetivo:
+1. Llama load_client_tokens(client_id) para cargar credenciales en sesión
+2. Activa diagnóstico en paralelo: ga4_tool, gtm_tool, ads_tool, web_tool
+3. Consolida hallazgos y genera plan de acción con A2UI (tabla de diagnóstico)
+4. Presenta plan al consultor y espera confirmación explícita
+5. Solo después de confirmación: activa impl_tool para ejecutar cambios
+
+NUNCA implementes cambios sin confirmación explícita del consultor.
+""",
+    tools=[load_client_tokens, ga4_tool, gtm_tool, ads_tool, web_tool, impl_tool],
+)
+```
+
+### Por qué @tool functions en vez de code execution
+
+Los MCP servers disponibles para GA4/GTM/Ads son **solo lectura** por defecto. Necesitamos escritura:
 - GA4 Admin API con scope `analytics.edit` — crear conversiones, dimensiones, audiencias
-- GTM API con scope `tagmanager.edit.containers` — crear tags, triggers, publicar
+- GTM API v2 con scope `tagmanager.edit.containers` — crear tags, triggers, publicar borradores
 - Google Ads API con scope `adwords` — crear conversiones, vincular propiedades
 
-Usando `UnsafeLocalCodeExecutor` en ADK, el agente puede ejecutar Python directamente con las librerías oficiales de Google que tienen acceso completo de lectura y escritura.
+Usando `@tool` functions normales de ADK, los agentes llaman las librerías Python oficiales de Google con los tokens del cliente desde `ToolContext.state`. No se necesita `UnsafeLocalCodeExecutor` ni code execution.
 
 ---
 
 ## 7. A2UI — Interfaz Dinámica del Agente
 
-### Qué es A2UI
-Protocolo open-source de Google para que los agentes generen componentes UI declarativamente. El agente devuelve JSON con estructura de UI, el frontend lo renderiza. Framework-agnostic, security-first.
+### Qué es A2UI (estado verificado a mayo 2026)
 
-### Componentes que usaremos
+A2UI es un **protocolo open-source real de Google** (repo: `github.com/google/A2UI`, licencia Apache 2.0, sitio: `a2ui.org`). Anunciado en Google Next 2025. El agente devuelve JSON estructurado → el frontend lo renderiza como componentes visuales.
+
+**Lo que NO existe**: Paquete npm `@google/a2ui` para React. El renderer oficial de React está en roadmap pero no publicado. El renderer disponible es para Lit (Web Components) y Flutter.
+
+**Decisión para este proyecto**: Implementar un **renderer custom en React/Next.js** que siga el contrato JSON de A2UI. Es ~200 líneas de código total para los 4 componentes que necesitamos. No dependemos de un paquete externo que puede cambiar.
+
+### Contrato JSON A2UI (spec v0.9 — lo que devuelve el agente)
+
+El agente incluye un bloque JSON en su respuesta. El frontend lo detecta por el campo `"__a2ui": true`:
+
 ```json
 // Tabla de hallazgos del diagnóstico
 {
+  "__a2ui": true,
   "type": "table",
   "title": "Diagnóstico GA4 — TiendaDemo",
   "columns": ["Área", "Estado", "Descripción", "Prioridad"],
@@ -482,6 +631,7 @@ Protocolo open-source de Google para que los agentes generen componentes UI decl
 
 // Card de acción con confirmación
 {
+  "__a2ui": true,
   "type": "action_card",
   "title": "Crear conversión 'purchase'",
   "description": "Se creará el evento de conversión 'purchase' en la propiedad GA4-123456",
@@ -492,6 +642,7 @@ Protocolo open-source de Google para que los agentes generen componentes UI decl
 
 // Progress bar durante implementación
 {
+  "__a2ui": true,
   "type": "progress",
   "title": "Implementando cambios GTM",
   "current": 3,
@@ -501,6 +652,7 @@ Protocolo open-source de Google para que los agentes generen componentes UI decl
 
 // Reporte final
 {
+  "__a2ui": true,
   "type": "summary_card",
   "title": "Ecosistema configurado exitosamente",
   "sections": [
@@ -511,16 +663,76 @@ Protocolo open-source de Google para que los agentes generen componentes UI decl
 }
 ```
 
-### Cómo integrar A2UI en el frontend
-1. Instalar el cliente A2UI de Google (buscar en npm: `@google/a2ui` o similar — **investigar el paquete exacto al construir**)
-2. En el componente de chat, detectar mensajes tipo A2UI (tienen `__a2ui` flag)
-3. Renderizar con el componente `<A2UIRenderer component={msg.a2ui} onAction={handleAction} />`
-4. `handleAction` envía confirmaciones de vuelta al agente
+### Implementación: renderer custom en Next.js + Tailwind
 
-**IMPORTANTE**: Al construir el frontend, investigar la documentación oficial de A2UI:
-- Repo: buscar `google/a2ui` en GitHub
-- Spec: https://google.github.io/a2ui (verificar URL exacta)
-- Keynote Next '26: https://github.com/GoogleCloudPlatform/next-26-keynotes (demo de referencia)
+```
+frontend/components/a2ui/
+├── A2UIRenderer.tsx     ← dispatcher: lee "type" y renderiza el componente correcto
+├── DiagnosisTable.tsx   ← type: "table"
+├── ActionCard.tsx       ← type: "action_card" con botón Confirmar/Cancelar
+├── ProgressBar.tsx      ← type: "progress"
+└── SummaryCard.tsx      ← type: "summary_card"
+```
+
+**A2UIRenderer.tsx** (dispatcher principal):
+```tsx
+// frontend/components/a2ui/A2UIRenderer.tsx
+import { DiagnosisTable } from "./DiagnosisTable";
+import { ActionCard } from "./ActionCard";
+import { ProgressBar } from "./ProgressBar";
+import { SummaryCard } from "./SummaryCard";
+
+interface A2UIProps {
+  component: Record<string, unknown>;
+  onAction?: (actionId: string) => void;
+}
+
+export function A2UIRenderer({ component, onAction }: A2UIProps) {
+  switch (component.type) {
+    case "table":       return <DiagnosisTable data={component} />;
+    case "action_card": return <ActionCard data={component} onAction={onAction} />;
+    case "progress":    return <ProgressBar data={component} />;
+    case "summary_card": return <SummaryCard data={component} />;
+    default:            return null;
+  }
+}
+```
+
+**Cómo el frontend detecta mensajes A2UI**:
+```tsx
+// En ChatClient.tsx — al recibir un mensaje del agente
+function parseAgentMessage(text: string): { text?: string; a2ui?: object } {
+  // El agente envuelve el JSON en un bloque: ```json ... ```
+  const match = text.match(/```json\n([\s\S]*?)\n```/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed.__a2ui) return { a2ui: parsed };
+    } catch {}
+  }
+  return { text };
+}
+```
+
+### Cómo el agente genera los componentes A2UI
+
+El agente incluye en su `instruction` las reglas para emitir JSON A2UI. No es una tool — es parte del output del LLM:
+
+```python
+# En el instruction del Planner Agent:
+"""
+Cuando presentes resultados de diagnóstico, incluye siempre un bloque JSON con el formato A2UI:
+```json
+{"__a2ui": true, "type": "table", ...}
+```
+Cuando necesites confirmación del consultor, usa action_card con requires_confirmation: true.
+"""
+```
+
+### Links de referencia A2UI
+- Repo oficial: https://github.com/google/A2UI
+- Sitio: https://a2ui.org
+- Blog: https://developers.googleblog.com/introducing-a2ui-an-open-project-for-agent-driven-interfaces/
 
 ---
 
@@ -704,35 +916,75 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ### Servicios GCP usados
 | Servicio | Para qué | Costo estimado |
 |---|---|---|
-| Agent Engine | Hosting de los 6 agentes Python | Incluido en $500 crédito hackathon |
-| Cloud Run | Hosting del frontend Next.js | ~$5/mes |
-| Firestore | Base de datos | Free tier generoso |
-| Secret Manager | API keys y encryption keys | ~$0.06/secret/mes |
-| Cloud KMS | Encriptación tokens OAuth | Opcional, usar Fernet local si presupuesto limita |
+| Agent Engine (Vertex AI) | Hosting de los 5 agentes Python | Incluido en $500 crédito hackathon |
+| Cloud Run | Frontend Next.js + Playwright Service | ~$5/mes |
+| Firestore | Base de datos (clientes, tokens, logs) | Free tier generoso |
+| Secret Manager | ENCRYPTION_KEY, GOOGLE_CLIENT_SECRET | ~$0.06/secret/mes |
+| Container Registry | Imagen Docker del Playwright Service | ~$0.10/GB/mes |
 
-### Deploy de agentes
+### APIs a habilitar en GCP
 ```bash
-# Deploy Planner Agent (orchestrador principal)
-adk deploy agent_engine \
-  --env_file .env \
+gcloud services enable aiplatform.googleapis.com
+gcloud services enable analyticsadmin.googleapis.com
+gcloud services enable tagmanager.googleapis.com
+gcloud services enable googleads.googleapis.com
+gcloud services enable firestore.googleapis.com
+gcloud services enable run.googleapis.com
+gcloud services enable containerregistry.googleapis.com
+gcloud services enable cloudresourcemanager.googleapis.com
+```
+
+### 1. Deploy Playwright Service (primero — los agentes dependen de su URL)
+```bash
+# Build y push imagen Docker
+docker build -t gcr.io/grapez-hackathon/playwright-service ./playwright_service
+docker push gcr.io/grapez-hackathon/playwright-service
+
+# Deploy a Cloud Run — 2Gi RAM mínimo para Chromium
+gcloud run deploy playwright-service \
+  --image=gcr.io/grapez-hackathon/playwright-service \
   --region=us-central1 \
+  --memory=2Gi \
+  --timeout=120 \
+  --allow-unauthenticated
+
+# Copiar la URL al .env:
+# PLAYWRIGHT_SERVICE_URL=https://playwright-service-xxxx-uc.a.run.app
+```
+
+### 2. Deploy agentes a Agent Engine
+```bash
+# Habilitar APIs de Vertex AI necesarias
+gcloud services enable aiplatform.googleapis.com cloudresourcemanager.googleapis.com
+
+# Deploy cada agente (el Planner importa los sub-agentes como módulos Python,
+# no como endpoints separados — se despliegan juntos en el mismo paquete)
+adk deploy agent_engine \
+  --project=grapez-hackathon \
+  --region=us-central1 \
+  --display_name="Grapez Planner Agent" \
   agents/planner_agent
 
-# Deploy agentes especializados (cada uno por separado o como sub-agentes)
-adk deploy agent_engine \
-  --env_file .env \
-  --region=us-central1 \
-  agents/ga4_agent
+# Guardar el Agent Engine ID en .env:
+# PLANNER_AGENT_ENGINE_ID=projects/.../locations/us-central1/reasoningEngines/...
 ```
 
-### Deploy frontend
+### 3. Deploy frontend
 ```bash
-# Desde /frontend
+# Desde /frontend — Cloud Run con source deploy (sin Dockerfile manual)
 gcloud run deploy grapez-hackathon-frontend \
   --source . \
-  --region us-central1 \
-  --allow-unauthenticated
+  --region=us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="NEXT_PUBLIC_APP_URL=https://grapez-hackathon-frontend-xxxx-uc.a.run.app"
 ```
+
+### Orden de deploy (importante)
+1. Playwright Service → obtener URL
+2. Actualizar `.env` con `PLAYWRIGHT_SERVICE_URL`
+3. Deploy Planner Agent (incluye todos los sub-agentes) → obtener Agent Engine ID
+4. Actualizar `.env` con `PLANNER_AGENT_ENGINE_ID`
+5. Deploy Frontend (ya conoce el Agent Engine ID)
 
 ---
 
@@ -809,37 +1061,36 @@ grapez-hackathon/
 │
 ├── agents/
 │   ├── planner_agent/
-│   │   ├── agent.py
-│   │   ├── prompts/
-│   │   │   └── system_prompt.md
+│   │   ├── agent.py                 ← LlmAgent con AgentTool de todos los sub-agentes
 │   │   └── tools/
-│   │       └── delegation_tools.py
+│   │       └── client_tools.py      ← load_client_tokens (Firestore → ToolContext.state)
 │   ├── ga4_agent/
-│   │   ├── agent.py
-│   │   ├── tools/
-│   │   │   ├── ga4_admin_tools.py   ← read + write via Admin API
-│   │   │   └── ga4_data_tools.py    ← read via Data API
-│   │   └── skills/                  ← poblar cuando se construya
+│   │   ├── agent.py                 ← LlmAgent con @tool functions de GA4 APIs
+│   │   └── tools/
+│   │       ├── ga4_admin_tools.py   ← read + write via google-analytics-admin
+│   │       └── ga4_data_tools.py    ← read via google-analytics-data
 │   ├── gtm_agent/
 │   │   ├── agent.py
-│   │   ├── tools/
-│   │   │   └── gtm_tools.py
-│   │   └── skills/
+│   │   └── tools/
+│   │       └── gtm_tools.py         ← GTM API v2 via google-api-python-client
 │   ├── ads_agent/
 │   │   ├── agent.py
-│   │   ├── tools/
-│   │   │   └── ads_tools.py
-│   │   └── skills/
+│   │   └── tools/
+│   │       └── ads_tools.py         ← Google Ads API via google-ads
 │   ├── web_analyzer_agent/
-│   │   ├── agent.py
-│   │   ├── tools/
-│   │   │   └── playwright_tools.py
-│   │   └── skills/
+│   │   ├── agent.py                 ← LlmAgent: tools llaman Playwright Service HTTP
+│   │   └── tools/
+│   │       └── playwright_tools.py  ← @tool functions que HTTP POST → Cloud Run
 │   └── implementation_agent/
 │       ├── agent.py
 │       └── tools/
-│           ├── confirmation_tools.py
-│           └── rollback_tools.py
+│           ├── confirmation_tools.py ← request_confirmation via A2UI action_card
+│           └── rollback_tools.py     ← snapshot Firestore antes de implementar
+│
+├── playwright_service/              ← microservicio independiente (NO agente ADK)
+│   ├── Dockerfile                   ← FROM mcr.microsoft.com/playwright/python
+│   ├── app.py                       ← FastAPI: /analyze, /crawl, /health
+│   └── requirements.txt             ← fastapi, uvicorn, playwright
 │
 ├── frontend/                        ← Next.js 15 App Router
 │   ├── app/
@@ -914,61 +1165,48 @@ Agencia de growth marketing enfocada en ecommerce y retail. Servicio principal: 
 
 ## 17. Instrucciones para el Agente de Construcción (Claude Code)
 
-Si eres Claude Code leyendo este archivo: bienvenido. Aquí están las reglas para construir este proyecto:
+Si eres Claude Code leyendo este archivo: bienvenido. La arquitectura está **completamente definida** — no hay pendientes de investigación. Lee la sección 19 antes de cualquier otra cosa.
 
 ### Antes de construir cualquier agente
-1. **Lee** la sección completa del agente en este CLAUDE.md
-2. **Investiga** la documentación oficial del ADK de Google: buscar en web `google adk python getting started 2026`
-3. **Busca skills** en MCP Market (https://mcp.so) para el agente específico antes de codear las herramientas
-4. **Lee** el README del repositorio de referencia: https://github.com/GoogleCloudPlatform/next-26-keynotes
-5. **Verifica** la versión actual del ADK: `pip index versions google-adk`
+1. **Lee** la sección 19 (Decisiones Técnicas Verificadas) — ya resuelve todas las dudas
+2. **Lee** la sección completa del agente específico en este CLAUDE.md
+3. **Busca skills** en MCP Market (https://mcp.so) para el agente específico
+4. Instala: `pip install google-adk==1.33.0` — usar versión fija
 
-### Al construir herramientas de API
-1. Busca la documentación oficial de la librería Python de Google (ej: `google-analytics-admin`)
-2. Verifica los nombres exactos de los métodos y parámetros — cambian entre versiones
-3. Siempre maneja errores de quota, auth expirado y permisos insuficientes
-4. Los tokens OAuth del cliente se pasan como parámetros (no como variables globales)
+### Al construir herramientas de API (@tool functions)
+1. Los tokens van en `ToolContext.state` — NUNCA como parámetros en el método
+2. Siempre usar `Credentials` de `google.oauth2.credentials` con access + refresh token
+3. Manejar `google.auth.exceptions.RefreshError` — devolver mensaje claro al consultor
+4. Los nombres exactos de métodos de las APIs están en la sección de cada agente
 
 ### Al construir el frontend
-1. Aplicar `vercel-react-best-practices` — sin waterfalls, sin re-renders innecesarios
-2. Investigar A2UI: buscar `google a2ui protocol` y `@google/a2ui npm`
-3. El chat debe hacer polling SSE al Agent Engine (o WebSocket si ADK lo soporta)
-4. Diseño visual: usar `frontend-design` skill para guía estética
+1. No hay paquete npm `@google/a2ui` — implementar renderer custom (ver sección 7)
+2. SSE está soportado nativamente en Agent Engine — usar `streamQuery` endpoint
+3. El chat detecta bloques `\`\`\`json` con `__a2ui: true` y renderiza con A2UIRenderer
+
+### Al construir el Playwright Service
+1. Usar imagen base: `mcr.microsoft.com/playwright/python:v1.59.0-noble`
+2. `--memory=2Gi` en Cloud Run es obligatorio — Chromium necesita al menos 1GB
+3. El agente llama el servicio via `httpx.post(PLAYWRIGHT_SERVICE_URL + "/analyze", ...)`
 
 ### Al construir el deploy
-1. Verificar con `gcloud --version` que gcloud CLI está instalado
-2. Verificar que `adk` CLI está instalado: `adk --version`
-3. Siempre deploy a `us-central1` (menor latencia desde Colombia)
-4. Habilitar las APIs necesarias en GCP antes de deployar:
-   ```
-   gcloud services enable analyticsadmin.googleapis.com
-   gcloud services enable tagmanager.googleapis.com
-   gcloud services enable googleads.googleapis.com
-   gcloud services enable firestore.googleapis.com
-   gcloud services enable run.googleapis.com
-   ```
+1. Orden obligatorio: Playwright Service → Agentes → Frontend
+2. Verificar: `gcloud --version` y `adk --version` antes de deployar
+3. Siempre `--region=us-central1`
 
 ### Principios de código
-- Python para agentes (ADK es Python)
-- TypeScript strict para frontend
-- No guardar tokens en texto plano — siempre encriptados
-- Logs de todas las acciones de implementación en Firestore
-- Manejo de errores explícito — el agente debe comunicar errores al consultor en lenguaje natural
-- Tests mínimos para herramientas críticas (las que escriben en APIs de Google)
+- Python 3.11+ para agentes; TypeScript strict para frontend
+- Tokens siempre encriptados con Fernet — NUNCA en texto plano en Firestore
+- Logs de todas las acciones de implementación en Firestore bajo `clients/{id}/sessions/{id}/actions`
+- Manejo de errores explícito — el agente comunica errores en lenguaje natural al consultor
+- Tests mínimos para las tools de escritura (create_conversion_event, create_tag, etc.)
 
-### Preguntas frecuentes que debes investigar
-- ¿Cómo funciona exactamente `SkillToolset` en la versión actual del ADK?
-- ¿Cuál es la sintaxis exacta de `adk deploy agent_engine`?
-- ¿Cómo se configuran sub-agentes en ADK (agent delegation)?
-- ¿El A2UI protocolo tiene un cliente npm oficial o hay que implementarlo desde la spec?
-- ¿Agent Engine soporta SSE nativo o hay que implementar polling?
-
-### Lo que NO debes hacer sin preguntar primero
-- Cambiar la arquitectura de 6 agentes
-- Usar un modelo distinto a `gemini-3-flash-preview` sin justificación
-- Guardar tokens OAuth sin encriptación
-- Publicar versiones de GTM automáticamente (siempre crear borrador)
-- Usar la GA4 Demo Account para pruebas de escritura (es solo lectura)
+### Restricciones absolutas (nunca sin aprobación)
+- No cambiar la arquitectura de 6 agentes
+- No usar modelo distinto a `gemini-3-flash-preview`
+- No guardar tokens OAuth sin encriptación Fernet
+- No publicar versiones de GTM directamente — siempre crear borrador primero
+- No escribir en GA4 Demo Account (solo lectura)
 
 ---
 
@@ -977,13 +1215,147 @@ Si eres Claude Code leyendo este archivo: bienvenido. Aquí están las reglas pa
 | Recurso | URL |
 |---|---|
 | Google ADK Docs | https://google.github.io/adk-docs/ |
-| Agent Engine Docs | https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview |
-| A2UI Protocol | Buscar: `google/a2ui` en GitHub |
-| Next '26 Keynote Repo | https://github.com/GoogleCloudPlatform/next-26-keynotes |
+| ADK Multi-agents | https://adk.dev/agents/multi-agents/ |
+| ADK Skills | https://adk.dev/skills/ |
+| ADK Auth | https://adk.dev/tools-custom/authentication/ |
+| Agent Engine Deploy | https://adk.dev/deploy/agent-engine/ |
+| Agent Engine — Use ADK | https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/use/adk |
+| A2UI Repo | https://github.com/google/A2UI |
+| A2UI Blog | https://developers.googleblog.com/introducing-a2ui-an-open-project-for-agent-driven-interfaces/ |
+| Playwright Docker Images | https://mcr.microsoft.com/en-us/product/playwright/python/about |
+| Playwright en Cloud Run | https://playwright.dev/python/docs/docker |
 | GA4 Admin API (Python) | https://googleapis.dev/python/google-analytics-admin/latest/ |
 | GTM API v2 | https://developers.google.com/tag-manager/api/v2 |
 | Google Ads API Python | https://github.com/googleads/google-ads-python |
-| ADK Skills Codelab | https://codelabs.developers.google.com/next26/dev-keynote |
 | Hackathon Devpost | https://googleforstartups-aiagents.devpost.com |
 | MCP Market | https://mcp.so |
 | analytics-tracking skill | https://mcp.so/server/analytics-tracking |
+
+---
+
+## 19. Decisiones Técnicas Verificadas
+
+> **Esta sección resuelve todas las deudas técnicas.** Investigación realizada el 11 de mayo 2026.
+> No hay pendientes de investigación — todas las decisiones están tomadas y justificadas.
+
+### 19.1 Google ADK — Versión y Imports
+
+**Versión**: `google-adk==1.33.0` (lanzada 8 mayo 2026)
+
+**Imports verificados**:
+```python
+from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent, LoopAgent
+from google.adk.tools import agent_tool          # AgentTool
+from google.adk.tools import FunctionTool, ToolContext
+from google.adk.skills import load_skill_from_dir
+from google.adk.tools import skill_toolset       # SkillToolset
+from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
+```
+
+**Patrón de orquestación elegido**: `AgentTool` (no `sub_agents`)
+- **Por qué**: El Planner necesita control explícito sobre cuándo y qué agente invocar. `sub_agents` deja la decisión al LLM de forma implícita. Con `AgentTool`, el Planner invoca cada agente como si fuera una function call controlada.
+- **ParallelAgent**: Disponible para el diagnóstico paralelo (GA4 + GTM + Ads + Web simultáneamente). Reduce el tiempo total a ~el tiempo del agente más lento en vez de la suma.
+
+**`UnsafeLocalCodeExecutor`**: Existe pero SOLO para desarrollo local. No funciona en Agent Engine. **No se usa en este proyecto** — se reemplaza con `@tool` functions normales que llaman las APIs de Google.
+
+---
+
+### 19.2 Agent Engine — Deploy y Streaming
+
+**Qué es**: Runtime managed de Vertex AI para agentes ADK. Antes llamado "Reasoning Engine". Endpoint regional en `us-central1-aiplatform.googleapis.com`.
+
+**Comando de deploy verificado**:
+```bash
+adk deploy agent_engine \
+  --project=grapez-hackathon \
+  --region=us-central1 \
+  --display_name="Grapez Planner Agent" \
+  agents/planner_agent
+```
+
+**SSE confirmado**: Soporta streaming nativo via `streamQuery?alt=sse`. El frontend consume el stream directamente.
+
+**Limitación crítica**: Code executors NO se combinan con otras tools en el mismo agente. Irrelevante para este proyecto porque no usamos code execution.
+
+**Estructura del deploy**: Todos los agentes se despliegan como un paquete Python. El Planner importa los sub-agentes como módulos Python — no son endpoints separados. Un solo deploy del Planner incluye todos los agentes.
+
+---
+
+### 19.3 Modelo Gemini
+
+**ID confirmado**: `gemini-3-flash-preview` — válido en Vertex AI desde diciembre 2025.
+
+**Otros modelos disponibles**:
+| ID | Estado | Usar si... |
+|---|---|---|
+| `gemini-3-flash-preview` | Public Preview | ← **el que usamos** |
+| `gemini-2.5-flash` | Stable | Se necesita estabilidad en producción |
+| `gemini-2.0-flash` | **DESCONTINUADO** | ❌ NO usar — apagado junio 1, 2026 |
+
+**Acceso**: Via Vertex AI con Application Default Credentials (service account). No se necesita API key separada si `GOOGLE_APPLICATION_CREDENTIALS` está configurado.
+
+---
+
+### 19.4 Web Analyzer — Playwright en Google Cloud
+
+**Problema**: Agent Engine no puede correr Playwright/Chromium — es un sandbox Python puro sin procesos de navegador ni Chromium instalado.
+
+**Solución elegida**: Playwright Service como microservicio independiente en Cloud Run con Docker.
+
+**Por qué Cloud Run y no otras opciones**:
+- GKE: overkill para hackathon, más configuración, más costoso
+- Browserless/Apify: servicios de terceros, no es tecnología Google (penalizaría en el hackathon)
+- Cloud Run: mismo ecosistema GCP, Docker nativo, escala a cero, ~$0 costo con tráfico mínimo
+
+**Imagen Docker**: `mcr.microsoft.com/playwright/python:v1.59.0-noble` — imagen oficial de Playwright con todas las dependencias del sistema ya instaladas (libatk, libnss3, libdbus, etc.). Evita los ~20 `apt-get install` manuales.
+
+**RAM**: `--memory=2Gi` obligatorio. Chromium headless consume 500MB-1GB en operación.
+
+**Por qué Playwright y no HTTP requests simples**: Los sitios modernos son SPAs (React/Angular/Next.js) que cargan contenido vía JavaScript. Un HTTP request simple ve HTML vacío o el shell del app. Playwright ejecuta Chrome real, corre el JavaScript, y permite leer `window.dataLayer`, capturar network requests a `google-analytics.com`, y detectar el GTM ID. Sin esto, el Web Analyzer no puede hacer su trabajo.
+
+---
+
+### 19.5 A2UI — Estado Real y Decisión
+
+**Existe y es real**: `github.com/google/A2UI` — protocolo open-source de Google, licencia Apache 2.0. Sitio: `a2ui.org`. Lanzado diciembre 2025.
+
+**Lo que NO existe**: Paquete npm `@google/a2ui` para React. El renderer oficial de React está en roadmap pero no publicado a mayo 2026. Renderers disponibles: Lit (Web Components) y Flutter.
+
+**Decisión**: Renderer custom en React/Next.js + Tailwind. ~200 líneas de código para 4 componentes (table, action_card, progress, summary_card). El contrato JSON de A2UI sí está especificado en el repo oficial — nuestro renderer lo implementa directamente.
+
+**Cómo mencionar A2UI en el hackathon**: "Implementamos el protocolo A2UI de Google para generar UI dinámica desde el agente." Esto es preciso y técnicamente correcto aunque el renderer sea custom.
+
+---
+
+### 19.6 OAuth y Tokens — Flujo en los Agentes
+
+**Patrón elegido**: `ToolContext.state`
+
+```python
+# Planner Agent carga tokens al inicio de sesión:
+tool_context.state["access_token"] = descifrar(token_de_firestore)
+tool_context.state["refresh_token"] = descifrar(refresh_de_firestore)
+
+# Cada sub-agente los lee en sus tools:
+access_token = tool_context.state.get("access_token")
+```
+
+**Por qué este patrón**: Es el más directo para el flujo de este proyecto. El OAuth ya ocurre en el frontend Next.js — los tokens llegan cifrados a Firestore. El Planner los carga al inicio de la sesión del agente y los propaga via `session.state` a todos los sub-agentes automáticamente.
+
+**Cifrado de tokens**: Fernet (librería `cryptography`). La `ENCRYPTION_KEY` se guarda en Secret Manager en producción. Para desarrollo local, en `.env` (gitignored).
+
+---
+
+### 19.7 Resumen de Cambios vs CLAUDE.md Original
+
+| Qué cambió | Antes | Ahora |
+|---|---|---|
+| Diagrama de arquitectura | Web Analyzer en Agent Engine | Web Analyzer Agent + Playwright Service (Cloud Run) |
+| ADK pattern principal | `Agent` + `SkillToolset` | `LlmAgent` + `AgentTool` + `@tool` functions |
+| Code execution | `UnsafeLocalCodeExecutor` en producción | NO se usa — @tool functions con APIs directas |
+| A2UI integración | Buscar `@google/a2ui` en npm | Renderer custom React/Tailwind ~200 líneas |
+| OAuth en agentes | Tokens como parámetros de función | `ToolContext.state` (propagación automática) |
+| Modelo | Verificar si `gemini-3-flash-preview` existe | Confirmado y válido |
+| `SkillToolset` | Por confirmar | Confirmado — `from google.adk.tools import skill_toolset` |
+| Deploy Web Analyzer | Sin definir | Playwright Service en Cloud Run con Docker 2Gi |
+| Deploy agentes | Agentes separados | Un solo deploy del Planner (importa sub-agentes como módulos) |
