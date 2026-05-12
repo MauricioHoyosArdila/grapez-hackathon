@@ -1,14 +1,14 @@
 # STATE.md — Grapez Analytics Agents
 
-> Hackathon: Google for Startups AI Agents Challenge | Deadline: Junio 5, 2026
+> Hackathon: Google for Startups AI Agents Challenge | Deadline: Junio 5, 2026 — **5:00 PM PT**
 
 ---
 
 ## Estado Actual
 
-**Fase**: 1 — Arquitectura completa y verificada. Lista para construir.
-**Última sesión**: 11 de mayo 2026
-**Próximo paso**: Semana 2 — Setup ADK local + OAuth + Planner skeleton
+**Fase**: 2 — Construcción activa. Semana 2 en curso.
+**Última sesión**: 12 de mayo 2026
+**Próximo paso**: Mauro: GCP setup + iron-session OAuth + mock UI | Juan Camilo: GA4 Agent + MCP skill
 
 ---
 
@@ -25,32 +25,41 @@
 
 > **Nota**: Semana 1 no se completó. Retomar desde aquí el 11 de mayo.
 
-### Semana 2 (May 10-16) — Diagnóstico GA4 + GTM
-- [ ] GA4 Agent completo — todas las herramientas de diagnóstico
-- [ ] Buscar + integrar skill analytics-tracking (borghei) desde MCP Market
-- [ ] GTM Agent completo — todas las herramientas de diagnóstico
-- [ ] Planner Agent coordina GA4 + GTM en paralelo (AgentTool pattern)
-- [ ] A2UI renderer custom en frontend (DiagnosisTable, ActionCard, ProgressBar, SummaryCard)
+### Semana 2 (May 10-16) — Setup base + GA4 + GTM ← EN CURSO
 
-### Semana 3 (May 17-23) — Ads + Web Analyzer
-- [ ] Google Ads Agent — diagnóstico
-- [ ] Playwright Service — Docker + FastAPI + Cloud Run
-- [ ] Web Analyzer Agent — llama Playwright Service via HTTP
-- [ ] Web Analyzer — crawl GTM ID, GA4 ID, dataLayer, errores
-- [ ] Setup entorno demo (TiendaDemo GA4 + GTM + sitio Vercel)
+**Mauro**:
+- [ ] GCP project + APIs habilitadas + OAuth Client ID + Service Account
+- [ ] iron-session OAuth flow (start → callback → session cookie)
+- [ ] Mock clients UI — `frontend/data/mock-clients.ts` con 3-4 clientes quemados
+- [ ] `scripts/generate_test_tokens.py` + compartir .env con Juan Camilo
 
-### Semana 4 (May 24-30) — Implementation Agent + A2UI completo
-- [ ] Implementation Agent — GA4 write operations
-- [ ] Implementation Agent — GTM write operations (crear workspace, tags, publicar borrador)
-- [ ] Flujo de confirmación via A2UI (action cards con botones)
-- [ ] Log de acciones en Firestore
+**Juan Camilo**:
+- [ ] Python env + `agents/dev_utils.py` (inject_local_tokens sin Firestore)
+- [ ] GA4 Agent — todas las tools de diagnóstico
+- [ ] Integrar skill `analytics-tracking` via MCP Market ← **satisface MCP obligatorio Track 1**
+- [ ] GTM Agent — todas las tools de diagnóstico
+- [ ] Probar con `adk web` localmente
 
-### Semana 5 (May 31 - Jun 4) — Polish + Video + Submit
-- [ ] Bug fixes y edge cases
-- [ ] Diagrama de arquitectura en /architecture/
-- [ ] README público para GitHub
-- [ ] Grabar video demo (1-2 min)
-- [ ] Submit en Devpost
+### Semana 3 (May 17-23) — Ads + Web Analyzer + Chat UI
+
+**Mauro**: A2UIRenderer (~200 líneas), Chat UI SSE, Planner skeleton en Agent Engine, TiendaDemo setup
+**Juan Camilo**: Ads Agent, Web Analyzer Agent (local Playwright), Planner orquestador paralelo
+
+### Semana 4 (May 24-30) — Implementation + Integración end-to-end
+
+**Mauro**: Playwright Service Cloud Run (2Gi), deploy completo, sitio Vercel TiendaDemo, flujo e2e
+**Juan Camilo**: Implementation Agent (GA4+GTM writes), confirmation flow A2UI, Firestore logs
+
+### Semana 5 (May 31 - Jun 4) — Polish + Submit
+
+- [ ] Bug fixes golden path demo
+- [ ] Diagrama de arquitectura PNG en `/architecture/` ← **requerido en texto Devpost**
+- [ ] Repo GitHub **público** (cambiar visibilidad)
+- [ ] README + descripción Devpost **en inglés**
+- [ ] Video demo **en inglés o con subtítulos en inglés** (máx 2 min)
+- [ ] Testing instructions en inglés con URL del demo
+- [ ] Ambos (Mauro + Juan Camilo) en Devpost for Teams
+- [ ] Submit antes del **5 de junio, 5:00 PM PT**
 
 ---
 
@@ -62,14 +71,20 @@
 | Modelo | `gemini-3-flash-preview` | Confirmado válido en Vertex AI desde dic 2025 |
 | ADK pattern orquestación | `AgentTool` (no `sub_agents`) | Control explícito sobre cuándo invocar cada agente |
 | Code execution | NO se usa — @tool functions con APIs directas | `UnsafeLocalCodeExecutor` no funciona en Agent Engine |
-| DB | Firestore | Nativo GCP, free tier generoso |
+| DB | Firestore (solo para logs de implementación en el demo) | Nativo GCP, free tier generoso |
+| OAuth tokens storage (demo) | iron-session cookie cifrada | Elimina ~4 días de dev; jueces ven OAuth real |
+| OAuth tokens storage (prod) | Firestore + Fernet encryption | Documentado en sección 8, post-hackathon |
 | OAuth en agentes | `ToolContext.state` | Propagación automática a sub-agentes, patrón oficial ADK |
-| APIs Google | Llamadas directas via Python (no MCP) | MCPs disponibles son solo lectura; necesitamos writes |
+| MCP integration | analytics-tracking skill (MCP Market) | Obligatorio Track 1; enriquece contexto GA4/GTM |
+| APIs Google (writes) | Llamadas directas via Python libs | MCPs disponibles son solo lectura; necesitamos writes |
 | Web crawling | Playwright en Docker (Cloud Run) | Agent Engine no tiene Chromium; Cloud Run sí |
 | UI dinámica | A2UI renderer custom React/Tailwind | No hay npm `@google/a2ui` para React; renderer custom ~200 líneas |
 | Deploy Web Analyzer | Cloud Run 2Gi Docker | Chromium requiere mínimo 1GB RAM; Cloud Run escala a cero |
 | Deploy agentes | Un deploy del Planner (importa sub-agentes como módulos) | Más simple que N deploys independientes |
 | Deploy orden | Playwright Service → Agentes → Frontend | Los agentes necesitan la URL del servicio Playwright |
+| Demo strategy | Mock clients UI + una cuenta real (Grapez Studio) | Demo más convincente, sin exponer datos de clientes |
+| Track del concurso | Track 1 (Build — Net-New) | Proyecto nuevo; mencionar potencial Track 3 en Devpost |
+| Deadline hora | 5:00 PM PT (reglas oficiales) | Corregido de 11:59 PM — ¡7 horas de diferencia! |
 | Alcance inicial | Uso interno Grapez | Demo más fuerte con datos reales, go-to-market más rápido |
 
 ---
@@ -92,11 +107,22 @@
 - Resuelto: Deploy — orden y comandos verificados
 - Todas las deudas técnicas eliminadas — arquitectura lista para construir
 
+### Sesión 3 — 12 de mayo 2026
+- Leídas reglas oficiales del concurso (PDF) — identificadas 6 correcciones críticas
+- Corregido deadline: **5:00 PM PT** (no 11:59 PM PT como estaba documentado)
+- Identificado requisito MCP obligatorio en Track 1 → satisfecho con analytics-tracking skill
+- Identificado requisito de inglés: video + descripción Devpost + testing instructions
+- Estrategia OAuth simplificada: iron-session cookie (no Firestore para tokens en el demo)
+- Estrategia demo decidida: mock clients UI + una cuenta real (Grapez Studio)
+- Plan de trabajo paralelo finalizado: Mauro (Infra) / Juan Camilo (Agentes) — Semanas 2-5
+- Colombia no aplica para Regional Winners (APAC/EMEA) — objetivo: Best Track 1 + Grand Prize
+- CLAUDE.md y STATE.md actualizados con todas estas decisiones
+
 ---
 
 ## Bloqueantes / Issues Abiertos
 
-_Ninguno. Todas las preguntas de investigación resueltas el 11 de mayo 2026._
+_Ninguno. Todas las preguntas de investigación y estrategia resueltas al 12 de mayo 2026._
 
 ---
 

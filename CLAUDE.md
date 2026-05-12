@@ -1,7 +1,7 @@
 # CLAUDE.md — Grapez Analytics Agents
 ## Google for Startups AI Agents Challenge — Hackathon 2026
 
-> **Deadline**: Junio 5, 2026 | **Estado detallado**: `STATE.md`
+> **Deadline**: Junio 5, 2026 — **5:00 PM PT** | **Estado detallado**: `STATE.md`
 
 ---
 
@@ -29,7 +29,7 @@ El servicio "Ecosistema de Medición" de Grapez tarda 2-3 semanas por cliente co
 ## 2. Reglas del Hackathon (leer antes de construir)
 
 **Concurso**: Google for Startups AI Agents Challenge (Devpost)
-**Deadline**: 5 de junio 2026, 11:59 PM PT
+**Deadline**: 5 de junio 2026, **5:00 PM PT** ← reglas oficiales sección 4 (¡no 11:59 PM!)
 **Repositorio**: debe ser público en GitHub al momento del submit
 
 ### Requisitos técnicos obligatorios
@@ -46,17 +46,37 @@ El servicio "Ecosistema de Medición" de Grapez tarda 2-3 semanas por cliente co
 | Innovation | 20% | Uso creativo de ADK/A2UI/Agent Engine |
 | Demo | 20% | Video 1-2 min claro y convincente |
 
-### Entregables requeridos
-- [ ] Video demo 1-2 minutos (YouTube o Vimeo, link en Devpost)
-- [ ] Repositorio GitHub público con código completo
-- [ ] Diagrama de arquitectura (en `/architecture/`)
-- [ ] Descripción en Devpost con business case
+### Entregables requeridos (reglas oficiales — sección 6 del PDF)
+- [ ] Video demo **1-2 minutos** — **en inglés o con subtítulos en inglés** (solo se evalúan los primeros 2 min)
+- [ ] Repositorio GitHub **público** al momento del submit
+- [ ] Diagrama de arquitectura — requerido **en el texto de Devpost** (no solo en `/architecture/`)
+- [ ] Descripción Devpost **en inglés**: resumen, features, tecnologías, fuentes de datos, arquitectura, aprendizajes
+- [ ] Link a demo accesible para jueces + testing instructions en inglés (URL + credenciales si es privado)
+- [ ] **Mauro y Juan Camilo** ambos registrados como team members en Devpost for Teams
+
+### MCP — obligatorio en Track 1
+Track 1 exige explícitamente: *"Show us how your agent uses the **Model Context Protocol (MCP)** to securely connect to external tools."*
+
+- La skill `analytics-tracking` de MCP Market **es un MCP server** — su integración satisface este requisito
+- Documentar en Devpost: "usamos MCP (analytics-tracking skill) para conectar conocimiento especializado de analytics"
+- Juan Camilo integra la skill via `SkillToolset` al construir GA4/GTM Agents (ver sección 10)
+
+### Premio — contexto Colombia
+| Premio | Monto | Cómo ganar |
+|---|---|---|
+| **Overall Grand Prize** | $15K USD + $10K GCP credits | Proyecto con mayor puntaje global |
+| **Best of Track 1** | $10K USD + $7.5K GCP credits | Mejor proyecto en Track 1 (Build) |
+| Regional Winners | $5K USD + $2.5K GCP | Solo APAC y EMEA — Colombia **no aplica** |
+
+Objetivo: **Best of Track 1** + aspirar a **Overall Grand Prize**.
 
 ### Lo que maximiza el score
-- A2UI para UI dinámica generada por el agente → Innovation +
-- Agent Engine para deploy → Technical Implementation +
-- Datos reales de clientes en demo → Business Case +
-- Múltiples agentes especializados con skills → Technical Implementation +
+- MCP integration (analytics-tracking skill) → Technical Implementation + **(obligatorio Track 1)**
+- A2UI renderer custom + protocolo A2UI → Innovation +
+- A2A Protocol implementado en el agente → Innovation + Technical Implementation +
+- Agent Engine deploy + SSE streaming → Technical Implementation +
+- Múltiples agentes especializados con tools reales de escritura (GA4/GTM/Ads) → Technical Implementation +
+- Datos reales de Grapez Studio en el demo → Business Case +
 
 ---
 
@@ -769,7 +789,14 @@ Los tokens OAuth DEBEN estar encriptados en Firestore. Usar `google-cloud-kms` o
 
 ---
 
-## 9. OAuth Google — Flujo Completo
+## 9. OAuth Google — Flujo para el Demo (iron-session)
+
+### Estrategia elegida: tokens on-the-fly (no Firestore para tokens en el demo)
+
+Los tokens OAuth se almacenan en una **cookie de sesión cifrada del servidor** (iron-session). El usuario se re-autentica al iniciar cada sesión de chat. Esto:
+- Elimina Firestore como dependencia para el demo
+- Hace explícito el flujo OAuth ante los jueces (ven la pantalla de permisos de Google con los 5 scopes)
+- Reduce el scope de desarrollo en ~4 días
 
 ### Scopes (todos juntos en una sola autorización)
 ```python
@@ -785,14 +812,93 @@ SCOPES = [
 ]
 ```
 
-### Flujo
-1. `/api/oauth/google/start` → redirect a Google OAuth con scopes completos
-2. `/api/oauth/google/callback` → recibe code → intercambia por tokens
-3. Encriptar tokens → guardar en Firestore bajo `clients/{id}/google_tokens`
-4. Al llamar agentes: leer tokens de Firestore → descifrar → pasar al agente
+### Implementación iron-session
 
-### Refresh automático
-Los access tokens expiran en 1 hora. Implementar middleware que detecte `401` de APIs de Google y ejecute refresh automáticamente usando el refresh_token.
+```typescript
+// frontend/lib/session.ts
+import { SessionOptions } from "iron-session"
+
+export interface SessionData {
+  accessToken?: string
+  refreshToken?: string
+  userEmail?: string
+  isLoggedIn: boolean
+}
+
+export const sessionOptions: SessionOptions = {
+  password: process.env.SESSION_SECRET!,  // mín. 32 chars — guardar en Secret Manager
+  cookieName: "grapez-session",
+  cookieOptions: {
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 3600,  // 1 hora — mismo TTL que el access token de Google
+  },
+}
+```
+
+### Endpoints OAuth
+
+```
+GET /api/oauth/google/start    → genera URL OAuth con 5 scopes + prompt:"consent"
+GET /api/oauth/google/callback → recibe code → tokens → guarda en iron-session → redirect al chat
+GET /api/oauth/google/status   → 200 con { email } si sesión activa, 401 si no
+```
+
+### Cómo los tokens llegan al agente
+
+```typescript
+// frontend/app/api/chat/route.ts
+import { getIronSession } from "iron-session"
+
+export async function POST(req: Request) {
+  const session = await getIronSession<SessionData>(req, res, sessionOptions)
+  if (!session.isLoggedIn) {
+    return Response.json({ error: "not_authenticated" }, { status: 401 })
+  }
+  const agentResponse = await callAgentEngine({
+    message: await req.json(),
+    initialState: {
+      access_token: session.accessToken,
+      refresh_token: session.refreshToken,
+    },
+  })
+  return agentResponse
+}
+```
+
+### Tool del Planner (recibe tokens del frontend via initialState)
+
+```python
+# agents/planner_agent/tools/client_tools.py
+@tool
+def load_client_tokens(access_token: str, refresh_token: str, tool_context: ToolContext) -> dict:
+    """Carga tokens OAuth en el estado de sesión del agente."""
+    tool_context.state["access_token"] = access_token
+    tool_context.state["refresh_token"] = refresh_token
+    return {"status": "tokens_loaded"}
+```
+
+### Desarrollo local sin OAuth — Juan Camilo
+
+```python
+# agents/dev_utils.py — SOLO para desarrollo local, nunca a producción
+import os
+from google.adk.tools import ToolContext
+
+def inject_local_tokens(tool_context: ToolContext) -> None:
+    """Inyecta tokens de prueba desde .env — evita OAuth durante desarrollo de agentes."""
+    tool_context.state["access_token"] = os.environ["TEST_ACCESS_TOKEN"]
+    tool_context.state["refresh_token"] = os.environ["TEST_REFRESH_TOKEN"]
+    tool_context.state["client_id"] = "tiendademo"
+```
+
+```bash
+# Generar tokens de prueba reales una sola vez (Mauro ejecuta esto):
+python scripts/generate_test_tokens.py
+# Copia TEST_ACCESS_TOKEN y TEST_REFRESH_TOKEN al .env de Juan Camilo
+```
+
+### Para producción post-hackathon
+Reemplazar iron-session con Firestore + Fernet encryption (schema en sección 8). Los tokens en Firestore **siempre encriptados con Fernet — NUNCA en texto plano**.
 
 ---
 
@@ -907,6 +1013,14 @@ ENCRYPTION_KEY=  # Fernet key, generar con: python -c "from cryptography.fernet 
 
 # Frontend
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# OAuth Session (iron-session)
+SESSION_SECRET=  # mín. 32 chars — generar con: openssl rand -base64 32
+
+# Tokens de prueba para desarrollo local de agentes (no producción)
+# Generar con: python scripts/generate_test_tokens.py
+TEST_ACCESS_TOKEN=
+TEST_REFRESH_TOKEN=
 ```
 
 ---
@@ -990,57 +1104,83 @@ gcloud run deploy grapez-hackathon-frontend \
 
 ## 14. Plan de Construcción — Semana a Semana
 
-**Hoy**: 2 de mayo 2026 | **Deadline**: 5 de junio 2026 | **Tiempo disponible**: ~5 semanas
+**Hoy**: 12 de mayo 2026 | **Deadline**: 5 de junio 2026, **5:00 PM PT** | **Tiempo disponible**: ~3.5 semanas
 
-### Semana 1 (May 2-9): Fundamentos
-- [ ] Setup del proyecto Python con ADK
-- [ ] Setup Next.js frontend
-- [ ] OAuth Google — flujo completo (start → callback → guardar tokens Firestore)
-- [ ] Firestore schema + encriptación tokens
-- [ ] Planner Agent skeleton — recibe mensaje, responde
-- [ ] Deploy básico en Agent Engine (verificar que funciona)
-- [ ] `.env.example` completo
+> Equipo: **Mauro** (Infra + Frontend) y **Juan Camilo** (Agentes Python). Trabajo en paralelo desde Semana 2.
 
-**Entregable**: OAuth funcional end-to-end, un agente básico respondiendo desde Agent Engine
+### Semana 2 (May 10-16): Setup base — EN CURSO
 
-### Semana 2 (May 10-16): Diagnóstico GA4 + GTM
-- [ ] GA4 Agent completo — todas las herramientas de diagnóstico
-- [ ] Buscar + integrar skill `analytics-tracking` (borghei)
-- [ ] GTM Agent completo — todas las herramientas de diagnóstico
-- [ ] Planner Agent coordina GA4 + GTM en paralelo
-- [ ] A2UI básico en frontend — renderizar tabla de hallazgos
+**Mauro (Infra + Frontend)**:
+- [ ] GCP project `grapez-hackathon` creado + APIs habilitadas (ver sección 13)
+- [ ] OAuth 2.0 Client ID + Service Account + `.env` base configurado
+- [ ] iron-session OAuth flow: `/api/oauth/google/start` → callback → session cookie (sección 9)
+- [ ] Mock clients UI: `frontend/data/mock-clients.ts` con 3-4 clientes quemados (ver sección 20)
+- [ ] `scripts/generate_test_tokens.py` — genera tokens reales para Juan Camilo
+- [ ] Compartir `service-account.json` + `.env` con Juan Camilo
 
-**Entregable**: Diagnóstico GA4 + GTM funcionando end-to-end, resultados visibles en UI
+**Juan Camilo (Agentes)**:
+- [ ] Python env: `pip install google-adk==1.33.0` + credenciales de prueba de Mauro
+- [ ] `agents/dev_utils.py` — `inject_local_tokens()` desde .env (sección 9)
+- [ ] GA4 Agent: todas las tools de diagnóstico (`list_accounts`, `list_properties`, etc.)
+- [ ] Integrar skill `analytics-tracking` via MCP Market — **satisface requisito MCP del Track 1**
+- [ ] GTM Agent: todas las tools de diagnóstico
+- [ ] Probar agentes localmente con `adk web`
 
-### Semana 3 (May 17-23): Ads + Web Analyzer
-- [ ] Google Ads Agent — diagnóstico de conversiones y vinculación GA4
-- [ ] Web Analyzer Agent — Playwright crawl básico (GTM ID, GA4 ID, dataLayer)
-- [ ] Web Analyzer — simulación funnel de conversión
-- [ ] Integrar Web Analyzer al flujo del Planner
-- [ ] Setup entorno demo (TiendaDemo GA4 + GTM + sitio Vercel)
+**Entregable**: OAuth funcional, GA4/GTM Agents corriendo con `adk web`, mock UI visible en el browser
 
-**Entregable**: Los 4 agentes de diagnóstico funcionando, entorno demo listo
+---
 
-### Semana 4 (May 24-30): Implementation Agent + A2UI completo
-- [ ] Implementation Agent — GA4 write operations (conversiones, dimensiones)
-- [ ] Implementation Agent — GTM write operations (tags, triggers, workspace, versión)
-- [ ] Flujo de confirmación via A2UI (action cards con botones)
-- [ ] A2UI completo: tablas, progress bars, summary cards, action cards
-- [ ] Rollback snapshot antes de implementar
-- [ ] Log de acciones en Firestore
+### Semana 3 (May 17-23): Ads + Web Analyzer + Chat UI
 
-**Entregable**: Sistema completo funcionando de punta a punta con demo data
+**Mauro (Infra + Frontend)**:
+- [ ] A2UIRenderer components: DiagnosisTable, ActionCard, ProgressBar, SummaryCard (~200 líneas)
+- [ ] Chat UI con SSE desde Agent Engine (`streamQuery?alt=sse`)
+- [ ] Planner Agent skeleton deployado en Agent Engine
+- [ ] Setup TiendaDemo: GA4 property + GTM container con errores plantados
 
-### Semana 5 (May 31 - Jun 4): Polish, Video, Submit
-- [ ] Bug fixes y edge cases
-- [ ] Diagrama de arquitectura (en `/architecture/`)
-- [ ] README público para GitHub
-- [ ] Script del video demo (ver `/docs/demo-script.md`)
-- [ ] Grabar video demo (1-2 minutos, en español o inglés)
-- [ ] Descripción Devpost con business case
-- [ ] Submit en Devpost antes del deadline
+**Juan Camilo (Agentes)**:
+- [ ] Google Ads Agent: diagnóstico conversiones, GA4 link, auto-tagging
+- [ ] Web Analyzer Agent: versión local con Playwright directo (sin Cloud Run aún)
+- [ ] Planner Agent: coordina GA4 + GTM + Ads + Web en paralelo (AgentTool + ParallelAgent)
 
-**Deadline final**: Junio 5, 2026, 11:59 PM PT
+**Entregable**: Chat UI conectado al Planner, diagnóstico de los 4 agentes visible con A2UI
+
+---
+
+### Semana 4 (May 24-30): Implementation + Integración end-to-end
+
+**Mauro (Infra + Frontend)**:
+- [ ] Playwright Service: Docker build + deploy en Cloud Run (2Gi RAM)
+- [ ] Web Analyzer Agent → switch a HTTP hacia Cloud Run Playwright Service
+- [ ] Deploy completo: Playwright Service → Agentes → Frontend
+- [ ] Sitio demo en Vercel (tiendademo)
+- [ ] Flujo completo: OAuth → Chat → Diagnóstico → A2UI → Confirmación → Implementación
+
+**Juan Camilo (Agentes)**:
+- [ ] Implementation Agent: GA4 write operations (conversiones, dimensiones, retención)
+- [ ] Implementation Agent: GTM write operations (workspace nuevo, tags, triggers, borrador)
+- [ ] Flujo de confirmación via A2UI action cards con botones Confirmar/Cancelar
+- [ ] Logs de implementación en Firestore bajo `clients/{id}/sessions/{id}/actions`
+- [ ] Rollback snapshot Firestore antes de implementar cambios irreversibles
+
+**Entregable**: Sistema completo punta a punta con TiendaDemo — golden path funcional
+
+---
+
+### Semana 5 (May 31 - Jun 4): Polish + Submission
+
+**Ambos**:
+- [ ] Bug fixes del golden path del demo
+- [ ] Diagrama de arquitectura exportado como PNG en `/architecture/` — **requerido en Devpost**
+- [ ] Repo GitHub **público** (cambiar visibilidad antes del submit)
+- [ ] README en **inglés** para GitHub (features, setup, arquitectura)
+- [ ] Descripción Devpost en **inglés** (resumen, features, tecnologías, arquitectura, aprendizajes)
+- [ ] Video demo en **inglés o con subtítulos en inglés** — máximo 2 minutos
+- [ ] Testing instructions en inglés con URL del demo + credenciales si es necesario
+- [ ] Ambos registrados como team members en Devpost for Teams
+- [ ] Submit antes del **5 de junio, 5:00 PM PT**
+
+**Deadline final**: 5 de junio 2026, **5:00 PM PT**
 
 ---
 
@@ -1359,3 +1499,82 @@ access_token = tool_context.state.get("access_token")
 | `SkillToolset` | Por confirmar | Confirmado — `from google.adk.tools import skill_toolset` |
 | Deploy Web Analyzer | Sin definir | Playwright Service en Cloud Run con Docker 2Gi |
 | Deploy agentes | Agentes separados | Un solo deploy del Planner (importa sub-agentes como módulos) |
+| OAuth storage (demo) | Firestore + Fernet | iron-session cookie (demo) → Firestore post-hackathon |
+| MCP integration | Sin definir | analytics-tracking skill via MCP Market (obligatorio Track 1) |
+| Deadline hora | 11:59 PM PT (incorrecto) | **5:00 PM PT** (reglas oficiales) |
+
+---
+
+### 19.8 OAuth on-the-fly — iron-session (decisión mayo 12, 2026)
+
+**Decisión**: Para el demo del hackathon, los tokens OAuth se almacenan en cookie de sesión cifrada (`iron-session`) en lugar de Firestore. El usuario re-autentica cada sesión.
+
+**Por qué**: Elimina ~4 días de desarrollo (Firestore token schema, Fernet encryption, refresh middleware). El resultado demo es más fuerte: los jueces ven el flujo OAuth real con los 5 scopes de Google. La arquitectura de producción (Firestore + Fernet) está documentada en sección 8 y se implementa post-hackathon.
+
+**Impacto en el Planner Agent**: El `load_client_tokens` en Section 6 (que leía de Firestore) se reemplaza por una versión que recibe `access_token` y `refresh_token` como parámetros pasados desde el frontend via `initialState` del Agent Engine session.
+
+---
+
+### 19.9 MCP Strategy — Track 1 Compliance (decisión mayo 12, 2026)
+
+**Requisito**: Track 1 exige explícitamente MCP. Las reglas dicen: *"Show us how your agent uses the Model Context Protocol (MCP) to securely connect to external tools."*
+
+**Cómo lo satisfacemos**: La skill `analytics-tracking` de MCP Market (borghei, 101 stars) es un MCP server que Juan Camilo integra en los agentes GA4 y GTM via `SkillToolset`. Esto es uso real de MCP para conectar conocimiento especializado de analytics al agente.
+
+**Cómo documentarlo en Devpost**: "We use the Model Context Protocol (MCP) to load the analytics-tracking skill, which provides our agents with specialized knowledge of GA4 event taxonomy, GTM architecture patterns, and Consent Mode v2 best practices — without hardcoding domain knowledge into agent instructions."
+
+---
+
+### 19.10 Demo Strategy — Mock Clients UI (decisión mayo 12, 2026)
+
+**Decisión**: El frontend muestra una lista de clientes con datos quemados (mock) para dar contexto visual al demo. Una sola cuenta ("Grapez Studio") está conectada con OAuth real y ejecuta los agentes reales.
+
+**Archivo**: `frontend/data/mock-clients.ts` — JSON estático con 3-4 clientes ficticios que tienen "conversaciones quemadas" mostrando diagnósticos previos con componentes A2UI renderizados.
+
+**Por qué**: El demo del video es más convincente si el juez ve una lista de clientes existentes (simula uso real del producto) antes de entrar al chat en vivo con la cuenta real.
+
+**Restricción**: Los datos mock deben ser claramente ficticios (Tienda Demo, Cliente Prueba, etc.) — no datos reales de clientes de Grapez Studio.
+
+---
+
+## 20. Estrategia de Demo y Distribución de Trabajo
+
+### UI mock + una cuenta real
+
+```
+Frontend (Next.js)
+├── / — lista de clientes
+│   ├── "Tienda Demo"      ← mock, conversación quemada con A2UI de diagnóstico
+│   ├── "E-commerce Test"  ← mock, conversación quemada con A2UI de implementación
+│   ├── "Retail Colombia"  ← mock, conversación quemada con summary card
+│   └── "Grapez Studio"    ← REAL — conecta OAuth → chat en vivo con agentes reales
+```
+
+El cliente "Grapez Studio" es la cuenta real de la agencia con acceso a GA4/GTM/Ads configurados. Los jueces ven el flujo completo real en esa cuenta.
+
+### División del trabajo
+
+| Semana | Mauro (Infra + Frontend) | Juan Camilo (Agentes Python) |
+|---|---|---|
+| S2 (May 10-16) | GCP setup, OAuth iron-session, mock UI, tokens para JuanCa | Dev env, GA4 Agent, GTM Agent, MCP skill |
+| S3 (May 17-23) | A2UIRenderer, Chat UI SSE, Planner skeleton en Agent Engine | Ads Agent, Web Analyzer local, Planner orquestador |
+| S4 (May 24-30) | Playwright Service Cloud Run, deploy completo, end-to-end | Implementation Agent, confirmation flow, Firestore logs |
+| S5 (May 31-Jun 4) | Diagrama arquitectura, README inglés, testing instructions | Bug fixes, golden path demo, video demo |
+
+### Cómo trabajar sin bloqueos entre personas
+
+**Juan Camilo no necesita el frontend para desarrollar agentes**:
+- Usa `adk web` (UI local de ADK) para probar cualquier agente
+- Usa `agents/dev_utils.py` para inyectar tokens desde `.env` sin OAuth
+- Desarrolla y valida cada agente de forma independiente
+
+**Mauro no necesita los agentes para desarrollar el frontend**:
+- Usa respuestas mock del Agent Engine para testear A2UIRenderer
+- El Chat UI funciona con SSE real en cuanto el Planner skeleton esté en Agent Engine (Semana 3)
+- Puede hardcodear una respuesta A2UI en el chat para testear los componentes
+
+### Track del concurso y potencial Track 3
+
+**Selección**: **Track 1** (Build — Net-New Agents) — es un sistema nuevo construido desde cero.
+
+**Potencial Track 3 a mencionar en Devpost**: El sistema cumple todos los requisitos de Track 3 (B2B focus ✓, Cloud-Native Runtime ✓, Vertex-Powered Intelligence ✓, A2A Interoperability ✓). Mencionar esto en la descripción demuestra visión de escalamiento y puede sumar en Business Case + Innovation.
