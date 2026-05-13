@@ -201,32 +201,7 @@ video_title     — título del video
 
 ---
 
-## 7. Preguntas clave para el brief del cliente
-
-El agente debe recopilar esta información antes de diagnosticar. Si alguna respuesta no está clara, preguntar directamente:
-
-```
-NEGOCIO
-- ¿A qué se dedica el negocio y cómo genera ingresos?
-- ¿Cuál es la acción más valiosa que un usuario puede hacer en el sitio?
-- ¿Venden directamente en el sitio o el sitio genera leads/contactos?
-- ¿Operan en uno o varios países?
-
-ESTADO ACTUAL
-- ¿Tienen GA4 instalado? (si no saben, el Web Analyzer lo detecta)
-- ¿Tienen GTM? (si no saben, el Web Analyzer lo detecta)
-- ¿Están activos en Google Ads?
-- ¿Han tenido problemas o sospechas de datos incorrectos?
-
-TÉCNICO
-- ¿Cuál es la URL del sitio?
-- ¿En qué plataforma está el sitio? (Shopify, WordPress, custom, etc.)
-- ¿Pueden modificar el código del sitio o todo debe ir por GTM?
-```
-
----
-
-## 8. Lo que un agente NO debe hacer
+## 7. Lo que un agente NO debe hacer
 
 - Crear cuentas de GA4, GTM o Google Ads — las cuentas deben existir
 - Publicar versiones en GTM sin confirmación del consultor
