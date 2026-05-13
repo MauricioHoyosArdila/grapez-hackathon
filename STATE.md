@@ -82,6 +82,7 @@
 | Deploy Web Analyzer | Cloud Run 2Gi Docker | Chromium requiere mínimo 1GB RAM; Cloud Run escala a cero |
 | Deploy agentes | Un deploy del Planner (importa sub-agentes como módulos) | Más simple que N deploys independientes |
 | Deploy orden | Playwright Service → Agentes → Frontend | Los agentes necesitan la URL del servicio Playwright |
+| Alcance agentes | GA4 + GTM + Web Analyzer + Implementation (sin Ads) | Ads eliminado: carga de trabajo > valor aportado |
 | Demo strategy | Mock clients UI + una cuenta real (Grapez Studio) | Demo más convincente, sin exponer datos de clientes |
 | Track del concurso | Track 1 (Build — Net-New) | Proyecto nuevo; mencionar potencial Track 3 en Devpost |
 | Deadline hora | 5:00 PM PT (reglas oficiales) | Corregido de 11:59 PM — ¡7 horas de diferencia! |
@@ -140,6 +141,6 @@ _Ninguno. Todas las preguntas de investigación y estrategia resueltas al 12 de 
 |---|---|---|
 | GA4 "TiendaDemo" property | ❌ Pendiente crear | En cuenta Google de Grapez — Semana 3 |
 | GTM "TiendaDemo" container | ❌ Pendiente crear | Con errores plantados — Semana 3 |
-| Google Ads test account | ❌ Pendiente crear | Necesita developer token — Semana 3 |
+| Google Ads test account | ~~Eliminado~~ | Agente de Ads removido del alcance |
 | Sitio demo Vercel | ❌ Pendiente crear | tiendademo.grapez.co o similar — Semana 3 |
 | Playwright Service (Cloud Run) | ❌ Pendiente crear | Docker build + deploy — Semana 3 |

@@ -11,7 +11,6 @@
 
 - **Google Analytics 4** — auditoría de configuración, eventos, conversiones, dimensiones
 - **Google Tag Manager** — contenedores, tags, triggers, variables, dataLayer
-- **Google Ads** — cuentas, conversiones, audiencias, atribución
 - **Sitio web del cliente** — detección de implementaciones existentes via crawl con Playwright
 
 El sistema no solo diagnostica: **genera un plan de implementación y lo ejecuta** usando APIs nativas (lectura + escritura completa), reportando cada acción al consultor via UI dinámica (A2UI).
@@ -110,7 +109,6 @@ Objetivo: **Best of Track 1** + aspirar a **Overall Grand Prize**.
 | GA4 Admin API | `analytics.edit` | Leer/crear propiedades, streams, eventos, conversiones |
 | GA4 Data API | `analytics.readonly` | Leer reportes, dimensiones, métricas |
 | GTM API | `tagmanager.edit.containers` | Leer/crear tags, triggers, variables, versiones |
-| Google Ads API | `adwords` | Leer/crear conversiones, audiencias, atribución |
 
 ### Scopes OAuth consolidados (pedir todos juntos)
 ```
@@ -118,7 +116,6 @@ https://www.googleapis.com/auth/analytics.edit
 https://www.googleapis.com/auth/analytics.readonly
 https://www.googleapis.com/auth/tagmanager.edit.containers
 https://www.googleapis.com/auth/tagmanager.publish
-https://www.googleapis.com/auth/adwords
 ```
 
 ---
@@ -135,35 +132,35 @@ https://www.googleapis.com/auth/adwords
 ┌──────────────────────────────────────────────────────────────┐
 │           PLANNER AGENT — Agent Engine (Vertex AI)            │
 │    LlmAgent: coordina sub-agentes via AgentTool + ParallelAgent│
-└──────┬──────────┬──────────┬────────────┬────────────────────┘
-       │ AgentTool│ AgentTool│ AgentTool  │ HTTP call
-       ▼          ▼          ▼            ▼
-  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌───────────────────────┐
-  │  GA4    │ │  GTM    │ │  ADS    │ │  WEB ANALYZER AGENT   │
-  │ AGENT   │ │ AGENT   │ │ AGENT   │ │  (Agent Engine)       │
-  │ Agent   │ │ Agent   │ │ Agent   │ │  llama HTTP → Cloud   │
-  │ Engine  │ │ Engine  │ │ Engine  │ │  Run Playwright svc   │
-  └────┬────┘ └────┬────┘ └────┬────┘ └──────────┬────────────┘
-       │           │           │                  │ HTTP POST /analyze
-       │           │           │        ┌─────────▼────────────┐
-       │           │           │        │  PLAYWRIGHT SERVICE   │
-       │           │           │        │  Cloud Run + Docker   │
-       │           │           │        │  chromium headless    │
-       │           │           │        │  2Gi RAM, port 8080   │
-       │           │           │        └──────────────────────┘
-       └───────────────────┬───┘
+└──────┬──────────┬──────────────────────────────────────────────┘
+       │ AgentTool│ AgentTool  │ HTTP call
+       ▼          ▼            ▼
+  ┌─────────┐ ┌─────────┐ ┌───────────────────────┐
+  │  GA4    │ │  GTM    │ │  WEB ANALYZER AGENT   │
+  │ AGENT   │ │ AGENT   │ │  (Agent Engine)       │
+  │ Agent   │ │ Agent   │ │  llama HTTP → Cloud   │
+  │ Engine  │ │ Engine  │ │  Run Playwright svc   │
+  └────┬────┘ └────┬────┘ └──────────┬────────────┘
+       │           │                  │ HTTP POST /analyze
+       │           │        ┌─────────▼────────────┐
+       │           │        │  PLAYWRIGHT SERVICE   │
+       │           │        │  Cloud Run + Docker   │
+       │           │        │  chromium headless    │
+       │           │        │  2Gi RAM, port 8080   │
+       │           │        └──────────────────────┘
+       └───────┬───┘
                            ▼
               ┌────────────────────────┐
               │  IMPLEMENTATION AGENT  │
               │  Agent Engine          │
-              │  GA4 + GTM + Ads write │
+              │  GA4 + GTM write       │
               └────────────────────────┘
                            │
-         GA4 Admin API + GTM API v2 + Google Ads API
+         GA4 Admin API + GTM API v2
                 (Python libs — tokens via ToolContext.state)
 
 INFRAESTRUCTURA GOOGLE CLOUD:
-  Agent Engine (Vertex AI) ← todos los 5 agentes Python
+  Agent Engine (Vertex AI) ← todos los 4 agentes Python
   Cloud Run                ← frontend Next.js + Playwright service (docker)
   Firestore                ← clientes, tokens cifrados, logs
   Secret Manager           ← ENCRYPTION_KEY, GOOGLE_CLIENT_SECRET
@@ -184,9 +181,9 @@ Esto mantiene toda la infraestructura en Google Cloud y resuelve la limitación 
 2. Conecta cuenta Google del cliente via OAuth → tokens encriptados en Firestore
 3. Abre chat → Planner Agent recibe el objetivo ("diagnostica el ecosistema")
 4. Planner carga tokens de Firestore → los pone en `session.state`
-5. Planner activa ParallelAgent: GA4 + GTM + Ads + Web Analyzer corren en paralelo
+5. Planner activa ParallelAgent: GA4 + GTM + Web Analyzer corren en paralelo
 6. Web Analyzer Agent llama Playwright Service (Cloud Run) via HTTP → recibe dataLayer, IDs, errores
-7. GA4/GTM/Ads Agents llaman APIs directamente con tokens del session.state
+7. GA4/GTM Agents llaman APIs directamente con tokens del session.state
 8. Planner consolida hallazgos → genera A2UI con tabla de diagnóstico
 9. Consultor confirma → Implementation Agent ejecuta cambios paso a paso
 10. Cada cambio: A2UI action_card → confirmación → ejecución → log en Firestore
@@ -194,7 +191,7 @@ Esto mantiene toda la infraestructura en Google Cloud y resuelve la limitación 
 
 ---
 
-## 5. Los 6 Agentes — Especificación Detallada
+## 5. Los 5 Agentes — Especificación Detallada
 
 ### 5.1 Planner Agent (Orchestrador)
 **Archivo**: `agents/planner_agent/agent.py`
@@ -204,7 +201,6 @@ Esto mantiene toda la infraestructura en Google Cloud y resuelve la limitación 
 **Herramientas**:
 - `delegate_to_ga4_agent(client_id, tokens)` — invoca GA4 Agent
 - `delegate_to_gtm_agent(client_id, tokens)` — invoca GTM Agent
-- `delegate_to_ads_agent(client_id, tokens)` — invoca Ads Agent
 - `delegate_to_web_analyzer(url)` — invoca Web Analyzer Agent
 - `delegate_to_implementation(plan, client_id, tokens)` — invoca Implementation Agent
 - `render_a2ui(component)` — envía componente A2UI al frontend
@@ -307,44 +303,7 @@ publish_version(account_id, container_id, workspace_id)
 
 ---
 
-### 5.4 Google Ads Agent
-**Archivo**: `agents/ads_agent/agent.py`
-**Rol**: Diagnóstico del ecosistema de Google Ads enfocado en medición y conversiones.
-
-**Herramientas**:
-```python
-# Diagnóstico (Google Ads API — read)
-get_customer_info(customer_id)
-list_conversion_actions(customer_id)
-get_conversion_attribution_model(customer_id)
-list_remarketing_lists(customer_id)
-check_google_ads_tag_installed(customer_id)
-get_linked_ga4_properties(customer_id)
-check_auto_tagging(customer_id)
-list_campaign_goals(customer_id)
-
-# Implementación (Google Ads API — write)
-create_conversion_action(customer_id, conversion_config)
-update_attribution_model(customer_id, model)
-link_ga4_property(customer_id, ga4_property_id)
-enable_auto_tagging(customer_id)
-```
-
-**Skills a buscar cuando se construya**:
-- `google-marketing-solutions/google_ads_mcp` — revisar estructura de tools
-- Skills sobre Google Ads conversion tracking, attribution models
-
-**Checklist de diagnóstico Google Ads**:
-- [ ] Auto-tagging activado (para que GA4 reciba datos de Ads)
-- [ ] GA4 property vinculada a Google Ads
-- [ ] Conversiones importadas desde GA4 (no tag duplicado)
-- [ ] Modelo de atribución configurado (Data-Driven recomendado)
-- [ ] Enhanced conversions activado
-- [ ] Listas de remarketing conectadas a GA4 Audiences
-
----
-
-### 5.5 Web Analyzer Agent
+### 5.4 Web Analyzer Agent
 **Archivo**: `agents/web_analyzer_agent/agent.py`
 **Rol**: Orquestar el análisis del sitio web del cliente. El agente corre en Agent Engine; el browser headless corre en el Playwright Service (Cloud Run separado).
 
@@ -432,7 +391,7 @@ playwright_service/          ← microservicio independiente (NO es un agente AD
 
 ---
 
-### 5.6 Implementation Agent
+### 5.5 Implementation Agent
 **Archivo**: `agents/implementation_agent/agent.py`
 **Rol**: Toma el plan generado por Planner Agent y ejecuta cada acción, paso a paso, con confirmación del consultor antes de cada cambio destructivo o irreversible.
 
@@ -560,14 +519,12 @@ import os
 # Importar los sub-agentes ya construidos
 from agents.ga4_agent.agent import root_agent as ga4_agent
 from agents.gtm_agent.agent import root_agent as gtm_agent
-from agents.ads_agent.agent import root_agent as ads_agent
 from agents.web_analyzer_agent.agent import root_agent as web_analyzer_agent
 from agents.implementation_agent.agent import root_agent as impl_agent
 
 # Envolver como AgentTools para llamada explícita y controlada
 ga4_tool = agent_tool.AgentTool(agent=ga4_agent)
 gtm_tool = agent_tool.AgentTool(agent=gtm_agent)
-ads_tool = agent_tool.AgentTool(agent=ads_agent)
 web_tool = agent_tool.AgentTool(agent=web_analyzer_agent)
 impl_tool = agent_tool.AgentTool(agent=impl_agent)
 
@@ -599,14 +556,14 @@ Eres el coordinador del ecosistema de medición de Grapez Studio.
 
 Al recibir un objetivo:
 1. Llama load_client_tokens(client_id) para cargar credenciales en sesión
-2. Activa diagnóstico en paralelo: ga4_tool, gtm_tool, ads_tool, web_tool
+2. Activa diagnóstico en paralelo: ga4_tool, gtm_tool, web_tool
 3. Consolida hallazgos y genera plan de acción con A2UI (tabla de diagnóstico)
 4. Presenta plan al consultor y espera confirmación explícita
 5. Solo después de confirmación: activa impl_tool para ejecutar cambios
 
 NUNCA implementes cambios sin confirmación explícita del consultor.
 """,
-    tools=[load_client_tokens, ga4_tool, gtm_tool, ads_tool, web_tool, impl_tool],
+    tools=[load_client_tokens, ga4_tool, gtm_tool, web_tool, impl_tool],
 )
 ```
 
@@ -805,7 +762,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/tagmanager.edit.containers",
     "https://www.googleapis.com/auth/tagmanager.publish",
-    "https://www.googleapis.com/auth/adwords",
     "openid",
     "email",
     "profile",
@@ -959,12 +915,6 @@ El demo del video NO puede usar datos reales de clientes (privacidad). Estrategi
   - Sin workspace limpio (todo en Default Workspace)
 - El agente detecta estos errores y los corrige
 
-### Google Ads Test Account
-- Crear cuenta de prueba con developer token en modo test
-- https://developers.google.com/google-ads/api/docs/first-call/dev-token
-- Configurar con: conversiones sin vincular a GA4, auto-tagging desactivado
-- El agente detecta + vincula + activa
-
 ### Sitio demo (para Web Analyzer)
 - Crear sitio demo simple en Vercel con Next.js (tiendademo.grapez.co o similar)
 - Implementar GTM con dataLayer básico de ecommerce
@@ -993,10 +943,6 @@ GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 OAUTH_REDIRECT_URI=http://localhost:3000/api/oauth/google/callback
-
-# Google Ads API
-GOOGLE_ADS_DEVELOPER_TOKEN=
-GOOGLE_ADS_LOGIN_CUSTOMER_ID=  # MCC account ID
 
 # Agent Engine
 AGENT_ENGINE_REGION=us-central1
@@ -1041,7 +987,6 @@ TEST_REFRESH_TOKEN=
 gcloud services enable aiplatform.googleapis.com
 gcloud services enable analyticsadmin.googleapis.com
 gcloud services enable tagmanager.googleapis.com
-gcloud services enable googleads.googleapis.com
 gcloud services enable firestore.googleapis.com
 gcloud services enable run.googleapis.com
 gcloud services enable containerregistry.googleapis.com
@@ -1139,7 +1084,6 @@ gcloud run deploy grapez-hackathon-frontend \
 - [ ] Setup TiendaDemo: GA4 property + GTM container con errores plantados
 
 **Juan Camilo (Agentes)**:
-- [ ] Google Ads Agent: diagnóstico conversiones, GA4 link, auto-tagging
 - [ ] Web Analyzer Agent: versión local con Playwright directo (sin Cloud Run aún)
 - [ ] Planner Agent: coordina GA4 + GTM + Ads + Web en paralelo (AgentTool + ParallelAgent)
 
@@ -1213,10 +1157,6 @@ grapez-hackathon/
 │   │   ├── agent.py
 │   │   └── tools/
 │   │       └── gtm_tools.py         ← GTM API v2 via google-api-python-client
-│   ├── ads_agent/
-│   │   ├── agent.py
-│   │   └── tools/
-│   │       └── ads_tools.py         ← Google Ads API via google-ads
 │   ├── web_analyzer_agent/
 │   │   ├── agent.py                 ← LlmAgent: tools llaman Playwright Service HTTP
 │   │   └── tools/
@@ -1267,7 +1207,6 @@ grapez-hackathon/
 ├── demo/
 │   ├── setup_tiendademo_ga4.py      ← crea/configura propiedad demo
 │   ├── setup_tiendademo_gtm.py      ← crea contenedor con errores plantados
-│   ├── setup_tiendademo_ads.py      ← configura cuenta ads de prueba
 │   └── reset_demo.py                ← resetea todo al estado "con errores"
 │
 ├── docs/
@@ -1342,7 +1281,7 @@ Si eres Claude Code leyendo este archivo: bienvenido. La arquitectura está **co
 - Tests mínimos para las tools de escritura (create_conversion_event, create_tag, etc.)
 
 ### Restricciones absolutas (nunca sin aprobación)
-- No cambiar la arquitectura de 6 agentes
+- No cambiar la arquitectura de 5 agentes
 - No usar modelo distinto a `gemini-3-flash-preview`
 - No guardar tokens OAuth sin encriptación Fernet
 - No publicar versiones de GTM directamente — siempre crear borrador primero
@@ -1502,6 +1441,7 @@ access_token = tool_context.state.get("access_token")
 | OAuth storage (demo) | Firestore + Fernet | iron-session cookie (demo) → Firestore post-hackathon |
 | MCP integration | Sin definir | analytics-tracking skill via MCP Market (obligatorio Track 1) |
 | Deadline hora | 11:59 PM PT (incorrecto) | **5:00 PM PT** (reglas oficiales) |
+| Google Ads Agent | Incluido (agente 4 de 6) | **Eliminado** — carga > valor para el hackathon |
 
 ---
 
