@@ -1071,7 +1071,7 @@ gcloud run deploy grapez-hackathon-frontend \
 - [ ] Compartir `service-account.json` + `.env` con Juan Camilo
 
 **Juan Camilo (Agentes)**:
-- [ ] Python env: `pip install google-adk==1.33.0` + credenciales de prueba de Mauro
+- [ ] Python env: crear `.venv` + `pip install -r requirements.txt` (ver sección 17 — Setup del entorno local) + credenciales de prueba de Mauro
 - [ ] `agents/dev_utils.py` — `inject_local_tokens()` desde .env (sección 9)
 - [ ] GA4 Agent: todas las tools de diagnóstico (`list_accounts`, `list_properties`, etc.)
 - [ ] Integrar skill `analytics-tracking` via MCP Market — **satisface requisito MCP del Track 1**
@@ -1257,7 +1257,48 @@ Si eres Claude Code leyendo este archivo: bienvenido. La arquitectura está **co
 1. **Lee** la sección 19 (Decisiones Técnicas Verificadas) — ya resuelve todas las dudas
 2. **Lee** la sección completa del agente específico en este CLAUDE.md
 3. **Busca skills** en MCP Market (https://mcp.so) para el agente específico
-4. Instala: `pip install google-adk==2.1.0` — usar versión fija (no sin pin — hay breaking changes entre versiones)
+4. **Configura el entorno virtual** (obligatorio — ver sección completa abajo)
+
+### Setup del entorno local (virtual environment — obligatorio)
+
+El proyecto usa un entorno virtual `.venv` para aislar las dependencias de Python del sistema global. Esto evita conflictos con otras librerías instaladas en la máquina (ej: `msal`, `azure-*`, etc.) y garantiza que todos trabajen con exactamente las mismas versiones.
+
+**Crear el entorno (una sola vez por máquina):**
+```bash
+# Desde la raíz del proyecto (grapez-hackathon/)
+python -m venv .venv
+
+# Activar — Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# Activar — macOS / Linux
+source .venv/bin/activate
+
+# Instalar todas las dependencias del proyecto
+pip install -r requirements.txt
+```
+
+El prompt cambiará a `(.venv) PS C:\...>` confirmando que el entorno está activo.
+
+**Activar al inicio de cada sesión de trabajo:**
+```bash
+# Windows
+.venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source .venv/bin/activate
+```
+
+**Luego ya puedes correr el agente:**
+```bash
+adk web
+```
+
+**Notas importantes:**
+- `.venv/` está en `.gitignore` — nunca se sube al repositorio
+- El entorno virtual NO afecta producción — Agent Runtime instala desde `requirements.txt` en su propio sandbox
+- Si instalas una nueva dependencia, agrégala a `requirements.txt` antes de hacer commit
+- Python requerido: **3.11+** (verificar con `python --version` antes de crear el venv)
 
 ### Al construir herramientas de API (plain functions ADK 2.x)
 1. Los tokens van en `ToolContext.state` — NUNCA como parámetros que el LLM puede ver
