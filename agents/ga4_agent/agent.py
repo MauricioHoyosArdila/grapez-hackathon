@@ -1,4 +1,5 @@
 from google.adk.agents import LlmAgent
+from google.genai import types
 
 from .tools.ga4_admin_tools import (
     check_enhanced_measurement,
@@ -22,8 +23,16 @@ from .tools.ga4_data_tools import (
 )
 
 root_agent = LlmAgent(
-    model="gemini-3.5-flash",
+    model="gemini-2.5-flash",
     name="ga4_agent",
+    generate_content_config=types.GenerateContentConfig(
+        http_options=types.HttpOptions(
+            retry_options=types.HttpRetryOptions(
+                initial_delay=30,
+                attempts=3,
+            ),
+        ),
+    ),
     description=(
         "Especialista en diagnóstico y configuración de Google Analytics 4. "
         "Audita propiedades GA4, identifica problemas de implementación y aplica "
@@ -32,20 +41,33 @@ root_agent = LlmAgent(
     instruction="""
 Eres un especialista en Google Analytics 4 de Grapez Studio.
 
-Cuando realices un diagnóstico completo de una propiedad GA4, sigue este orden:
-1. list_accounts() — identifica las cuentas disponibles
-2. list_properties(account_id) — lista propiedades de la cuenta
-3. Para cada propiedad relevante, verifica:
-   - list_data_streams(property_id) — streams web activos
-   - list_conversions(property_id) — conversiones configuradas
-   - list_custom_dimensions(property_id) — dimensiones personalizadas
-   - list_custom_metrics(property_id) — métricas personalizadas
-   - list_audiences(property_id) — audiencias de remarketing
-   - get_data_retention_settings(property_id) — retención de datos
-   - check_data_freshness(property_id) — estado actual del tracking
-4. Para cada stream web: check_enhanced_measurement(property_id, stream_id)
-5. get_events_last_30_days(property_id) — eventos que están llegando
-6. get_conversion_report(property_id) — conversiones activas en los últimos 30 días
+## REGLA CRÍTICA — SCOPE (leer antes de cualquier acción)
+
+NUNCA analices múltiples propiedades en un mismo diagnóstico.
+
+Cuando el Planner te pida listar cuentas y propiedades:
+1. Llama list_accounts() — devuelve la lista de cuentas disponibles
+2. Por cada cuenta: llama list_properties(account_id) — devuelve las propiedades
+3. DETENTE aquí. Devuelve el inventario completo al Planner. No diagnostiques nada.
+
+Cuando el Planner te pida diagnosticar una propiedad específica:
+- Recibirás un property_id y account_id concretos en el mensaje
+- Diagnostica ÚNICAMENTE esa propiedad — ignora las demás
+- No vuelvas a listar cuentas ni propiedades
+
+## FLUJO DE DIAGNÓSTICO (solo cuando tienes property_id confirmado)
+
+1. get_property_details(property_id) — detalles de la propiedad
+2. list_data_streams(property_id) — streams web activos
+3. Para cada stream web: check_enhanced_measurement(property_id, stream_id)
+4. list_conversions(property_id) — conversiones configuradas
+5. list_custom_dimensions(property_id) — dimensiones personalizadas
+6. list_custom_metrics(property_id) — métricas personalizadas
+7. list_audiences(property_id) — audiencias de remarketing
+8. get_data_retention_settings(property_id) — retención de datos
+9. get_events_last_30_days(property_id) — eventos que están llegando
+10. check_data_freshness(property_id) — estado actual del tracking
+11. get_conversion_report(property_id) — conversiones activas en los últimos 30 días
 
 Clasifica cada hallazgo:
 - ✅ Correcto — cumple las mejores prácticas

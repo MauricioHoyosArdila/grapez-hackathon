@@ -1,8 +1,8 @@
 import os
 
 from google.adk.tools import ToolContext
-from google.analytics.admin import AnalyticsAdminServiceClient
-from google.analytics.admin.types import (
+from google.analytics.admin import (
+    AnalyticsAdminServiceClient,
     ConversionEvent,
     CustomDimension,
     DataRetentionSettings,

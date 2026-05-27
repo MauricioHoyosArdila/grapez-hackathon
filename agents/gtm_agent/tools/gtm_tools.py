@@ -623,6 +623,178 @@ def create_version(
         return {"error": str(e)}
 
 
+def rename_gtm_tag(
+    account_id: str,
+    container_id: str,
+    workspace_id: str,
+    tag_id: str,
+    new_name: str,
+    tool_context: ToolContext,
+) -> dict:
+    """
+    Renombra un tag existente en un workspace GTM.
+    Usar para marcar elementos mejorados con el prefijo '⚠️ MEJORADO — '.
+    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+
+    Args:
+        account_id: ID numérico de la cuenta GTM
+        container_id: ID numérico del contenedor
+        workspace_id: ID numérico del workspace
+        tag_id: ID numérico del tag a renombrar
+        new_name: Nuevo nombre (ej: "⚠️ MEJORADO — GA4 Configuración Base")
+    """
+    if not tool_context.state.get("implementation_confirmed"):
+        return {
+            "blocked": True,
+            "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
+            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+        }
+    tool_context.state["implementation_confirmed"] = False
+    try:
+        service = _gtm_client(tool_context)
+        path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/tags/{tag_id}"
+        tag = service.accounts().containers().workspaces().tags().get(path=path).execute()
+        tag["name"] = new_name
+        updated = service.accounts().containers().workspaces().tags().update(
+            path=path, body=tag
+        ).execute()
+        return {"success": True, "tag_id": tag_id, "new_name": updated["name"]}
+    except google.auth.exceptions.RefreshError:
+        return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def rename_gtm_trigger(
+    account_id: str,
+    container_id: str,
+    workspace_id: str,
+    trigger_id: str,
+    new_name: str,
+    tool_context: ToolContext,
+) -> dict:
+    """
+    Renombra un trigger existente en un workspace GTM.
+    Usar para marcar triggers obsoletos con el prefijo '⚠️ MEJORADO — '.
+    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+
+    Args:
+        account_id: ID numérico de la cuenta GTM
+        container_id: ID numérico del contenedor
+        workspace_id: ID numérico del workspace
+        trigger_id: ID numérico del trigger a renombrar
+        new_name: Nuevo nombre (ej: "⚠️ MEJORADO — Click Botón Comprar")
+    """
+    if not tool_context.state.get("implementation_confirmed"):
+        return {
+            "blocked": True,
+            "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
+            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+        }
+    tool_context.state["implementation_confirmed"] = False
+    try:
+        service = _gtm_client(tool_context)
+        path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/triggers/{trigger_id}"
+        trigger = service.accounts().containers().workspaces().triggers().get(path=path).execute()
+        trigger["name"] = new_name
+        updated = service.accounts().containers().workspaces().triggers().update(
+            path=path, body=trigger
+        ).execute()
+        return {"success": True, "trigger_id": trigger_id, "new_name": updated["name"]}
+    except google.auth.exceptions.RefreshError:
+        return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def rename_gtm_variable(
+    account_id: str,
+    container_id: str,
+    workspace_id: str,
+    variable_id: str,
+    new_name: str,
+    tool_context: ToolContext,
+) -> dict:
+    """
+    Renombra una variable existente en un workspace GTM.
+    Usar para marcar variables obsoletas con el prefijo '⚠️ MEJORADO — '.
+    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+
+    Args:
+        account_id: ID numérico de la cuenta GTM
+        container_id: ID numérico del contenedor
+        workspace_id: ID numérico del workspace
+        variable_id: ID numérico de la variable a renombrar
+        new_name: Nuevo nombre (ej: "⚠️ MEJORADO — DL transaction_id")
+    """
+    if not tool_context.state.get("implementation_confirmed"):
+        return {
+            "blocked": True,
+            "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
+            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+        }
+    tool_context.state["implementation_confirmed"] = False
+    try:
+        service = _gtm_client(tool_context)
+        path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/variables/{variable_id}"
+        variable = service.accounts().containers().workspaces().variables().get(path=path).execute()
+        variable["name"] = new_name
+        updated = service.accounts().containers().workspaces().variables().update(
+            path=path, body=variable
+        ).execute()
+        return {"success": True, "variable_id": variable_id, "new_name": updated["name"]}
+    except google.auth.exceptions.RefreshError:
+        return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def pause_gtm_tag(
+    account_id: str,
+    container_id: str,
+    workspace_id: str,
+    tag_id: str,
+    tool_context: ToolContext,
+) -> dict:
+    """
+    Pausa un tag en un workspace GTM para que deje de dispararse.
+    Usar para desactivar tags marcados como '⚠️ MEJORADO' después de que el consultor lo autorice.
+    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+
+    Args:
+        account_id: ID numérico de la cuenta GTM
+        container_id: ID numérico del contenedor
+        workspace_id: ID numérico del workspace
+        tag_id: ID numérico del tag a pausar
+    """
+    if not tool_context.state.get("implementation_confirmed"):
+        return {
+            "blocked": True,
+            "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
+            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+        }
+    tool_context.state["implementation_confirmed"] = False
+    try:
+        service = _gtm_client(tool_context)
+        path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/tags/{tag_id}"
+        tag = service.accounts().containers().workspaces().tags().get(path=path).execute()
+        tag["paused"] = True
+        updated = service.accounts().containers().workspaces().tags().update(
+            path=path, body=tag
+        ).execute()
+        return {
+            "success": True,
+            "tag_id": tag_id,
+            "name": updated["name"],
+            "paused": updated.get("paused", True),
+            "message": "Tag pausado. Dejará de dispararse al publicar esta versión.",
+        }
+    except google.auth.exceptions.RefreshError:
+        return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def publish_version(
     account_id: str,
     container_id: str,

@@ -281,11 +281,18 @@ get_container_version(account_id, container_id, version_id)
 list_versions(account_id, container_id)
 
 # Implementación (GTM API v2 — write)
-create_tag(account_id, container_id, workspace_id, tag_config)
-create_trigger(account_id, container_id, workspace_id, trigger_config)
-create_variable(account_id, container_id, workspace_id, variable_config)
-create_workspace(account_id, container_id, workspace_name)
-publish_version(account_id, container_id, workspace_id)
+create_workspace(account_id, container_id, name, description)
+create_tag(account_id, container_id, workspace_id, name, tag_type, parameters, firing_trigger_ids)
+create_trigger(account_id, container_id, workspace_id, name, trigger_type, filters)
+create_variable(account_id, container_id, workspace_id, name, variable_type, parameters)
+create_version(account_id, container_id, workspace_id, version_name, version_notes)
+publish_version(account_id, container_id, version_id)
+
+# Mejora de elementos existentes (write — requieren confirmación)
+rename_gtm_tag(account_id, container_id, workspace_id, tag_id, new_name)
+rename_gtm_trigger(account_id, container_id, workspace_id, trigger_id, new_name)
+rename_gtm_variable(account_id, container_id, workspace_id, variable_id, new_name)
+pause_gtm_tag(account_id, container_id, workspace_id, tag_id)
 ```
 
 **Skills a buscar cuando se construya**:
@@ -1076,9 +1083,9 @@ gcloud run deploy grapez-hackathon-frontend \
 - [ ] GA4 Agent: todas las tools de diagnóstico (`list_accounts`, `list_properties`, etc.)
 - [ ] Integrar skill `analytics-tracking` via MCP Market — **satisface requisito MCP del Track 1**
 - [ ] GTM Agent: todas las tools de diagnóstico
-- [ ] Probar agentes localmente con `adk web`
+- [ ] Probar agentes localmente con `adk web agents/planner_agent`
 
-**Entregable**: OAuth funcional, GA4/GTM Agents corriendo con `adk web`, mock UI visible en el browser
+**Entregable**: OAuth funcional, GA4/GTM Agents corriendo con `adk web agents/planner_agent`, mock UI visible en el browser
 
 ---
 
@@ -1289,10 +1296,30 @@ El prompt cambiará a `(.venv) PS C:\...>` confirmando que el entorno está acti
 source .venv/bin/activate
 ```
 
+**Configurar autenticación Gemini (una sola vez por máquina):**
+```bash
+# Apuntar al proyecto GCP correcto
+gcloud config set project grapez-ecosistema-medicion
+
+# Configurar Application Default Credentials
+gcloud auth application-default login
+# Se abre el browser — autenticar con plataformas@grapezstudio.com
+```
+
+Asegurarse de que `.env` tenga:
+```bash
+GOOGLE_GENAI_USE_VERTEXAI=true
+GOOGLE_CLOUD_LOCATION=us-central1
+```
+
+Sin esto, ADK busca `GOOGLE_API_KEY` y falla con "No API key was provided".
+
 **Luego ya puedes correr el agente:**
 ```bash
-adk web
+adk web agents/planner_agent
 ```
+
+> **Importante**: NO correr `adk web` desde la raíz del proyecto — ADK usaría el nombre del directorio `grapez-hackathon` (con guión) como identificador, lo cual es un identificador Python inválido y lanza `ValueError`. El comando correcto siempre apunta al directorio del agente.
 
 **Notas importantes:**
 - `.venv/` está en `.gitignore` — nunca se sube al repositorio
@@ -1582,17 +1609,19 @@ agents-cli publish gemini-enterprise \
 
 ### 19.3 Modelo Gemini
 
-**ID confirmado**: `gemini-3.5-flash` — GA en Gemini Enterprise Agent Platform desde abril 2026. El sufijo `-preview` ya no aplica.
+**Modelo en uso**: `gemini-2.5-flash` — único disponible en el proyecto Vertex AI `grapez-ecosistema-medicion` (verificado 27 mayo 2026).
 
-**Otros modelos disponibles**:
-| ID | Estado | Usar si... |
+> **Nota**: `gemini-3.5-flash` fue anunciado GA el 19 mayo 2026 pero su rollout en Vertex AI no ha llegado al proyecto. Cuando esté disponible, cambiar el `model=` en los 3 agentes. Por ahora `gemini-2.5-flash` es superior a `gemini-2.0-flash` y no tiene fecha de expiración.
+
+**Modelos verificados en el proyecto** (via `google.genai.Client(vertexai=True)`):
+| ID | Estado en nuestro proyecto | Notas |
 |---|---|---|
-| `gemini-3.5-flash` | **GA** | ← **el que usamos** |
-| `gemini-3.1-flash` | Preview | Versión con multimodal mejorado (imagen) |
-| `gemini-3.1-pro` | GA | Se necesita máxima capacidad de razonamiento |
-| `gemini-2.0-flash` | **DESCONTINUADO** | ❌ NO usar — apagado junio 1, 2026 |
+| `gemini-2.5-flash` | ✅ **DISPONIBLE — el que usamos** | Mejor razonamiento que 2.0 |
+| `gemini-3.5-flash` | ❌ 404 en Vertex AI | Rollout pendiente — cambiar cuando llegue |
+| `gemini-2.0-flash` | ❌ Retirado del proyecto | Apagado junio 1, 2026 |
+| `gemini-1.5-flash` | ❌ Retirado del proyecto | Apagado |
 
-**Acceso**: Via Gemini Enterprise Agent Platform con Application Default Credentials. No se necesita API key separada si ADC está configurado (`gcloud auth application-default login`).
+**Acceso**: Via Vertex AI con Application Default Credentials — configurar con `gcloud auth application-default login` + `GOOGLE_GENAI_USE_VERTEXAI=true` en `.env`.
 
 ---
 
@@ -1782,7 +1811,7 @@ El cliente "Grapez Studio" es la cuenta real de la agencia con acceso a GA4/GTM/
 ### Cómo trabajar sin bloqueos entre personas
 
 **Juan Camilo no necesita el frontend para desarrollar agentes**:
-- Usa `adk web` (UI local de ADK) para probar cualquier agente
+- Usa `adk web agents/planner_agent` (UI local de ADK) para probar cualquier agente
 - Usa `agents/dev_utils.py` para inyectar tokens desde `.env` sin OAuth
 - Desarrolla y valida cada agente de forma independiente
 
@@ -1790,6 +1819,31 @@ El cliente "Grapez Studio" es la cuenta real de la agencia con acceso a GA4/GTM/
 - Usa respuestas mock del Agent Engine para testear A2UIRenderer
 - El Chat UI funciona con SSE real en cuanto el Planner skeleton esté en Agent Engine (Semana 3)
 - Puede hardcodear una respuesta A2UI en el chat para testear los componentes
+
+### 19.12 Retry automático para 429 — patrón en todos los agentes (mayo 27, 2026)
+
+Los agentes complejos hacen múltiples llamadas LLM en una sola sesión (Planner → GA4 → GTM). El rate limit del modelo puede generar errores 429 transitorios. Todos los agentes tienen retry configurado:
+
+```python
+from google.genai import types
+
+root_agent = LlmAgent(
+    model="gemini-2.5-flash",
+    generate_content_config=types.GenerateContentConfig(
+        http_options=types.HttpOptions(
+            retry_options=types.HttpRetryOptions(
+                initial_delay=30,  # espera 30s antes del primer reintento (error dice ~17s)
+                attempts=3,        # hasta 3 reintentos automáticos
+            ),
+        ),
+    ),
+    ...
+)
+```
+
+Con Vertex AI + billing habilitado los 429 son raros. Este retry es la red de seguridad para picos ocasionales. Si los 429 persisten, solicitar aumento de quota en GCP Console → APIs & Services → Quotas.
+
+---
 
 ### Track del concurso y potencial Track 3
 

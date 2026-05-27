@@ -7,8 +7,8 @@
 ## Estado Actual
 
 **Fase**: 3 — Construcción activa. Semana 4 en curso (May 24-30).
-**Última sesión**: 26 de mayo 2026 (Sesión 5)
-**Próximo paso**: Probar localmente con `adk web` — tokens reales de Mauro + cuenta TiendaDemo
+**Última sesión**: 27 de mayo 2026 (Sesión 6)
+**Próximo paso**: Probar `adk web agents/planner_agent` con cuenta real de Grapez Studio — flujo completo scope selection → diagnóstico GA4 + GTM
 
 ---
 
@@ -111,6 +111,28 @@
 - Resuelto: Modelo gemini-3-flash-preview confirmado válido
 - Resuelto: Deploy — orden y comandos verificados
 - Todas las deudas técnicas eliminadas — arquitectura lista para construir
+
+### Sesión 6 — 27 de mayo 2026
+
+- **Configuración de entorno resuelta**:
+  - Modelo `gemini-3.5-flash` no disponible en Vertex AI del proyecto → `gemini-2.5-flash` es el único disponible (verificado con prueba directa)
+  - Auth local definitiva: `GOOGLE_GENAI_USE_VERTEXAI=true` + `gcloud auth application-default login`
+  - Créditos del hackathon vinculados a la cuenta de facturación del proyecto GCP
+  - Fix de imports: `google.analytics.admin.types` no existe → importar desde `google.analytics.admin` directo
+
+- **Scope selection implementado**:
+  - Planner Agent: PASO 0 obligatorio — lista cuentas/propiedades/contenedores primero, confirma cuál analizar, luego diagnostica
+  - GA4 Agent: regla CRÍTICA de no analizar múltiples propiedades — se detiene y devuelve inventario si hay varias
+  - GTM Agent: misma regla para contenedores
+
+- **GTM: protocolo de mejora de elementos existentes**:
+  - Cuando se mejora un elemento: crear nuevo + renombrar el viejo con prefijo `⚠️ MEJORADO —`
+  - 4 herramientas nuevas: `rename_gtm_tag`, `rename_gtm_trigger`, `rename_gtm_variable`, `pause_gtm_tag`
+  - Flujo: crear nuevo → renombrar viejo → preguntar si autoriza pausar tags obsoletos
+
+- **Retry automático**: `HttpRetryOptions(initial_delay=30, attempts=3)` en los 3 agentes
+
+- **CLAUDE.md actualizado**: sección 19.3 (modelo), 17 (auth setup), 5.3 (GTM tools), nueva 19.12 (retry)
 
 ### Sesión 5 — 26 de mayo 2026
 
