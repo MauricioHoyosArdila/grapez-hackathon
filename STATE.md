@@ -6,9 +6,9 @@
 
 ## Estado Actual
 
-**Fase**: 2 — Construcción activa. Semana 2 en curso.
-**Última sesión**: 12 de mayo 2026
-**Próximo paso**: Mauro: GCP setup + iron-session OAuth + mock UI | Juan Camilo: GA4 Agent + MCP skill
+**Fase**: 3 — Construcción activa. Semana 4 en curso (May 24-30).
+**Última sesión**: 26 de mayo 2026 (Sesión 5)
+**Próximo paso**: Probar localmente con `adk web` — tokens reales de Mauro + cuenta TiendaDemo
 
 ---
 
@@ -25,20 +25,24 @@
 
 > **Nota**: Semana 1 no se completó. Retomar desde aquí el 11 de mayo.
 
-### Semana 2 (May 10-16) — Setup base + GA4 + GTM ← EN CURSO
+### Semana 2 (May 10-16) — Setup base + GA4 + GTM ← COMPLETADA
 
 **Mauro**:
-- [ ] GCP project + APIs habilitadas + OAuth Client ID + Service Account
-- [ ] iron-session OAuth flow (start → callback → session cookie)
-- [ ] Mock clients UI — `frontend/data/mock-clients.ts` con 3-4 clientes quemados
+- [x] iron-session OAuth flow (start → callback → session cookie)
+- [x] Mock clients UI — `frontend/lib/mock-clients.ts` con 3-4 clientes quemados
+- [x] A2UIRenderer components: DiagnosisTable, ActionCard, ProgressBar, SummaryCard
+- [x] Chat UI con SSE desde Agent Engine
+- [x] `agents/dev_utils.py` — inject_local_tokens y get_test_credentials
+- [ ] GCP project + APIs habilitadas + OAuth Client ID + Service Account (pendiente verificar)
 - [ ] `scripts/generate_test_tokens.py` + compartir .env con Juan Camilo
 
 **Juan Camilo**:
-- [ ] Python env + `agents/dev_utils.py` (inject_local_tokens sin Firestore)
-- [ ] GA4 Agent — todas las tools de diagnóstico
+- [ ] Python env configurado localmente + `pip install -r requirements.txt`
+- [x] GA4 Agent — tools de diagnóstico y escritura ← completado por Mauro el 26 mayo
+- [x] GTM Agent — tools diagnóstico + escritura ← completado por Mauro el 26 mayo
+- [x] Planner Agent — orquestador con AgentTool GA4+GTM ← completado por Mauro el 26 mayo
 - [ ] Integrar skill `analytics-tracking` via MCP Market ← **satisface MCP obligatorio Track 1**
-- [ ] GTM Agent — todas las tools de diagnóstico
-- [ ] Probar con `adk web` localmente
+- [ ] Probar sistema completo con `adk web` + tokens reales
 
 ### Semana 3 (May 17-23) — Ads + Web Analyzer + Chat UI
 
@@ -67,8 +71,8 @@
 
 | Decisión | Elegido | Razón |
 |---|---|---|
-| Framework de agentes | Google ADK 1.33.0 | Requerimiento hackathon + nativo con Gemini |
-| Modelo | `gemini-3-flash-preview` | Confirmado válido en Vertex AI desde dic 2025 |
+| Framework de agentes | Google ADK 2.1.0 (lanzado 23 mayo 2026) | Requerimiento hackathon + nativo con Gemini — sin @tool decorator en 2.x |
+| Modelo | `gemini-3.5-flash` | GA desde Google I/O 2026 (19 mayo 2026) |
 | ADK pattern orquestación | `AgentTool` (no `sub_agents`) | Control explícito sobre cuándo invocar cada agente |
 | Code execution | NO se usa — @tool functions con APIs directas | `UnsafeLocalCodeExecutor` no funciona en Agent Engine |
 | DB | Firestore (solo para logs de implementación en el demo) | Nativo GCP, free tier generoso |
@@ -107,6 +111,33 @@
 - Resuelto: Modelo gemini-3-flash-preview confirmado válido
 - Resuelto: Deploy — orden y comandos verificados
 - Todas las deudas técnicas eliminadas — arquitectura lista para construir
+
+### Sesión 5 — 26 de mayo 2026
+
+- GTM Agent construido completo:
+  - `agents/gtm_agent/tools/gtm_tools.py` — 16 tools: 10 diagnóstico + 6 escritura (create_workspace, create_tag, create_trigger, create_variable, create_version, publish_version)
+  - `agents/gtm_agent/agent.py` — LlmAgent con gemini-3.5-flash y los 16 tools
+- Planner Agent reescrito completo (reemplaza placeholder):
+  - `agents/planner_agent/tools/client_tools.py` — 4 tools: get_session_info, load_client_tokens, confirm_action, set_business_context
+  - `agents/planner_agent/agent.py` — LlmAgent orquestador con AgentTool para GA4+GTM, flujo de confirmación Grapez
+- `agent.py` creado en la raíz del proyecto — punto de entrada para `adk web`
+- `agents/__init__.py` + `agents/planner_agent/__init__.py` + demás `__init__.py` creados
+- **Arquitectura de guardrails Grapez implementada**:
+  - Capa 3 (state check Python) aplicada a los 8 write tools de GA4 y GTM
+  - `confirm_action()` como única llave para habilitar escrituras — un solo uso por confirmación
+  - `set_business_context()` para calibrar diagnóstico por tipo de negocio del cliente
+- CLAUDE.md sección 17 actualizada con documentación completa de la metodología Grapez para Juan Camilo
+- requirements.txt pinneado a `google-adk==2.1.0`
+
+### Sesión 4 — 26 de mayo 2026
+- Revisado estado del repositorio: Juan Camilo tiene rama `dev/juanca/ga4-agent` con commit vacío
+- GA4 Agent construido completo (Mauro):
+  - `agents/ga4_agent/tools/ga4_admin_tools.py` — 13 tools: list_accounts, list_properties, get_property_details, list_data_streams, check_enhanced_measurement, list_conversions, list_custom_dimensions, list_custom_metrics, list_audiences, get_data_retention_settings, create_conversion_event, create_custom_dimension, update_data_retention
+  - `agents/ga4_agent/tools/ga4_data_tools.py` — 3 tools: get_events_last_30_days, get_conversion_report, check_data_freshness
+  - `agents/ga4_agent/agent.py` — LlmAgent con gemini-3-flash y los 16 tools
+  - `agents/ga4_agent/__init__.py` y `agents/ga4_agent/tools/__init__.py` creados
+- STATE.md actualizado al estado real (semana 4, no semana 2)
+- Próximo: GTM Agent
 
 ### Sesión 3 — 12 de mayo 2026
 - Leídas reglas oficiales del concurso (PDF) — identificadas 6 correcciones críticas

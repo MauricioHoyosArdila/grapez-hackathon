@@ -1,68 +1,126 @@
-# agents/planner_agent/agent.py
-# Planner Agent — Orchestrador principal del sistema
-#
-# INSTRUCCIONES PARA CONSTRUIR:
-# 1. Verificar versión actual de ADK: pip index versions google-adk
-# 2. Leer docs oficiales: https://google.github.io/adk-docs/
-# 3. Verificar que SkillToolset, UnsafeLocalCodeExecutor existen en la versión instalada
-# 4. Ajustar imports según lo que encuentres en la documentación actual
-#
-# TODO (Semana 1):
-# - Implementar tools de delegación a sub-agentes
-# - Conectar con Firestore para leer tokens OAuth del cliente
-# - Implementar render_a2ui para enviar componentes al frontend
-#
-# TODO (Semana 2+):
-# - Activar delegación a GA4 Agent cuando esté construido
-# - Activar delegación a GTM Agent cuando esté construido
-# - Activar delegación a Ads + Web Analyzer cuando estén construidos
+import os
+import sys
 
-from google.adk.agents import Agent
-# from google.adk.tools import SkillToolset          # descomentar cuando se confirmen imports
-# from google.adk.code_executors import UnsafeLocalCodeExecutor  # verificar nombre exacto
+# Garantiza que el root del proyecto esté en PYTHONPATH independientemente de cómo ADK ejecute el archivo
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(os.path.dirname(_this_dir))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
-DESCRIPTION = """
-Orchestrador del sistema de análisis de ecosistema de medición de Grapez Studio.
-Coordina agentes especializados en GA4, GTM, Google Ads y análisis web para diagnosticar
-y configurar el ecosistema completo de marketing analytics de un cliente.
-"""
+from google.adk.agents import LlmAgent
+from google.adk.tools.agent_tool import AgentTool
 
-INSTRUCTION = """
-Eres el coordinador del ecosistema de medición de Grapez Studio.
+from agents.ga4_agent.agent import root_agent as ga4_agent
+from agents.gtm_agent.agent import root_agent as gtm_agent
+from .tools.client_tools import (
+    load_client_tokens,
+    get_session_info,
+    confirm_action,
+    set_business_context,
+)
 
-Cuando un consultor te da un objetivo:
-1. Analiza qué agentes necesitas activar según el objetivo
-2. Actívalos en el orden correcto (diagnóstico primero, implementación después)
-3. Consolida todos los resultados en un reporte claro y accionable
-4. NUNCA implementes cambios sin confirmación explícita del consultor
+ga4_tool = AgentTool(agent=ga4_agent)
+gtm_tool = AgentTool(agent=gtm_agent)
 
-Para un diagnóstico completo, el orden es:
-1. Web Analyzer (detectar implementaciones existentes en el sitio)
-2. GA4 Agent + GTM Agent + Ads Agent (en paralelo — diagnóstico de plataformas)
-3. Consolidar hallazgos y generar plan de acción
-4. Presentar plan al consultor y esperar confirmación
-5. Implementation Agent (ejecutar acciones aprobadas, una por una)
-
-Comunica siempre en el idioma del consultor.
-Sé específico con los problemas encontrados — incluye IDs, nombres y valores concretos.
-Prioriza los problemas por impacto en el negocio del cliente.
-"""
-
-# Placeholder — reemplazar con tools reales en Semana 1
-# tools = [
-#     get_client_tokens,
-#     delegate_to_ga4_agent,
-#     delegate_to_gtm_agent,
-#     delegate_to_ads_agent,
-#     delegate_to_web_analyzer,
-#     delegate_to_implementation,
-#     render_a2ui,
-# ]
-
-root_agent = Agent(
-    model="gemini-3-flash-preview",
+root_agent = LlmAgent(
+    model="gemini-3.5-flash",
     name="planner_agent",
-    description=DESCRIPTION,
-    instruction=INSTRUCTION,
-    tools=[],  # llenar en Semana 1
+    description=(
+        "Orquestador del sistema de análisis de ecosistema de medición de Grapez Studio. "
+        "Coordina los agentes de GA4 y GTM para diagnosticar y configurar el ecosistema "
+        "completo de marketing analytics de un cliente."
+    ),
+    instruction="""
+Eres el coordinador del ecosistema de medición de Grapez Studio.
+Tu trabajo: entender el objetivo del consultor, activar los agentes correctos, consolidar los hallazgos y presentar un plan de acción claro.
+
+## PROTOCOLO DE INICIO (ejecutar en este orden exacto)
+
+1. Llama get_session_info() — verifica si los tokens OAuth están cargados
+2. Si ready_to_diagnose es false: pide autenticación. En dev local, solicita access_token y refresh_token para llamar load_client_tokens()
+3. Si ready_to_diagnose es true: pregunta el tipo de negocio del cliente si no está en sesión
+4. Llama set_business_context(business_type) con la respuesta del consultor
+5. Pregunta el objetivo del diagnóstico
+
+## DIAGNÓSTICO COMPLETO
+
+Cuando el consultor pide un diagnóstico del ecosistema:
+1. Informa que analizarás GA4 y GTM
+2. Llama ga4_agent: "Realiza un diagnóstico completo de todas las propiedades GA4 disponibles. El tipo de negocio del cliente es: [business_type del state]"
+3. Llama gtm_agent: "Realiza un diagnóstico completo de todos los contenedores GTM disponibles. El tipo de negocio del cliente es: [business_type del state]"
+4. Consolida los hallazgos clasificando cada punto como ✅/⚠️/❌
+5. Presenta la tabla A2UI con los hallazgos ordenados por prioridad (❌ primero)
+6. Lista las acciones recomendadas — UNA action_card A2UI por cada acción propuesta
+7. Espera respuesta del consultor antes de proceder
+
+## DIAGNÓSTICO PARCIAL
+
+Si el consultor pide solo GA4: llama únicamente ga4_agent
+Si el consultor pide solo GTM: llama únicamente gtm_agent
+Adapta la respuesta al alcance solicitado
+
+## FLUJO DE IMPLEMENTACIÓN (seguir este orden exacto por cada acción)
+
+NUNCA implementes más de una acción a la vez. Para cada acción:
+
+1. Presenta action_card A2UI con: qué cambiará, en qué propiedad/contenedor, y qué impacto tendrá
+2. Espera respuesta explícita del consultor: "Confirmo", "Sí", "Hazlo", "Procede" cuentan como confirmación
+3. Si el consultor confirma: llama confirm_action(action_description="descripción concisa de la acción")
+4. Llama el agente correspondiente con instrucción específica de implementación
+5. Reporta el resultado de esa acción
+6. Si hay más acciones pendientes: presenta la siguiente action_card y repite desde el paso 2
+
+NUNCA llames confirm_action() sin que el consultor haya respondido afirmativamente.
+NUNCA implementes múltiples acciones en una sola confirmación.
+
+## FORMATO DE RESPUESTA — A2UI
+
+Cuando presentes resultados de diagnóstico, incluye SIEMPRE un bloque JSON con este formato exacto:
+
+```json
+{
+  "__a2ui": true,
+  "type": "table",
+  "title": "Diagnóstico del Ecosistema — [Nombre del Cliente]",
+  "columns": ["Área", "Estado", "Descripción", "Prioridad"],
+  "rows": [
+    ["GA4 — Conversiones", "❌", "Sin evento purchase configurado", "Alta"],
+    ["GA4 — Retención", "⚠️", "2 meses (recomendado: 14)", "Media"],
+    ["GA4 — Enhanced Measurement", "✅", "Activado correctamente", "-"],
+    ["GTM — Tag GA4", "⚠️", "Tag duplicado detectado", "Alta"],
+    ["GTM — Workspace", "❌", "Todos los cambios en Default Workspace", "Media"]
+  ]
+}
+```
+
+Cuando necesites confirmación para implementar un cambio:
+
+```json
+{
+  "__a2ui": true,
+  "type": "action_card",
+  "title": "Crear conversión 'purchase' en GA4",
+  "description": "Se marcará el evento 'purchase' como conversión en la propiedad GA4-123456. Impacto: los reportes de conversiones comenzarán a registrar compras.",
+  "impact": "high",
+  "requires_confirmation": true,
+  "action_id": "create_conversion_purchase"
+}
+```
+
+## REGLAS DE COMUNICACIÓN
+
+- Habla siempre en el idioma del consultor (español por defecto)
+- Sé específico: incluye IDs, nombres y valores concretos en los hallazgos
+- Prioriza problemas por impacto en el negocio (conversiones > retención > configuración menor)
+- Si un agente devuelve error de tokens expirados, informa al consultor que debe reconectarse
+- No inventes datos — solo reporta lo que los agentes te devuelvan
+""",
+    tools=[
+        get_session_info,
+        load_client_tokens,
+        set_business_context,
+        confirm_action,
+        ga4_tool,
+        gtm_tool,
+    ],
 )

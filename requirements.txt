@@ -3,7 +3,7 @@
 # Después: playwright install chromium
 
 # ─── Google ADK ────────────────────────────────────────────
-google-adk
+google-adk==2.1.0
 
 # ─── Google APIs ───────────────────────────────────────────
 google-analytics-admin>=0.22.0

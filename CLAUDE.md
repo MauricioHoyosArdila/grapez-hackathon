@@ -86,8 +86,10 @@ Objetivo: **Best of Track 1** + aspirar a **Overall Grand Prize**.
 |---|---|---|
 | **Python** | 3.11+ | Lenguaje de todos los agentes |
 | **Google ADK** | `google-adk` latest | Framework de agentes |
-| **Gemini 3 Flash Preview** | `gemini-3-flash-preview` | Modelo de todos los agentes |
-| **Agent Engine** | Google Cloud managed | Deploy y hosting de agentes |
+| **Gemini 3.5 Flash** | `gemini-3.5-flash` | Modelo de todos los agentes |
+| **Gemini Enterprise Agent Platform** | Agent Runtime (ex-Agent Engine) | Deploy y hosting de agentes |
+| **Agents CLI** | `google-agents-cli` latest | Scaffold, eval, deploy y publish de agentes |
+| **Agent Studio** | UI visual en Gemini Enterprise | Prototipado de instrucciones del sistema |
 | **Playwright (Python)** | `playwright` latest | Web Analyzer — crawl sitios |
 | **google-analytics-admin** | latest | GA4 Admin API (read+write) |
 | **google-analytics-data** | latest | GA4 Data API (read) |
@@ -127,17 +129,17 @@ https://www.googleapis.com/auth/tagmanager.publish
 │                     FRONTEND (Next.js 15)                     │
 │  OAuth Google → Firestore → Chat UI + A2UI Renderer custom   │
 └───────────────────────────┬──────────────────────────────────┘
-                            │ HTTP / SSE (Agent Engine endpoint)
+                            │ HTTP / SSE (Agent Runtime endpoint)
                             ▼
 ┌──────────────────────────────────────────────────────────────┐
-│           PLANNER AGENT — Agent Engine (Vertex AI)            │
+│    PLANNER AGENT — Agent Runtime (Gemini Enterprise Agent Platform)    │
 │    LlmAgent: coordina sub-agentes via AgentTool + ParallelAgent│
 └──────┬──────────┬──────────────────────────────────────────────┘
        │ AgentTool│ AgentTool  │ HTTP call
        ▼          ▼            ▼
   ┌─────────┐ ┌─────────┐ ┌───────────────────────┐
   │  GA4    │ │  GTM    │ │  WEB ANALYZER AGENT   │
-  │ AGENT   │ │ AGENT   │ │  (Agent Engine)       │
+  │ AGENT   │ │ AGENT   │ │  (Agent Runtime)      │
   │ Agent   │ │ Agent   │ │  llama HTTP → Cloud   │
   │ Engine  │ │ Engine  │ │  Run Playwright svc   │
   └────┬────┘ └────┬────┘ └──────────┬────────────┘
@@ -152,7 +154,7 @@ https://www.googleapis.com/auth/tagmanager.publish
                            ▼
               ┌────────────────────────┐
               │  IMPLEMENTATION AGENT  │
-              │  Agent Engine          │
+              │  Agent Runtime         │
               │  GA4 + GTM write       │
               └────────────────────────┘
                            │
@@ -160,7 +162,7 @@ https://www.googleapis.com/auth/tagmanager.publish
                 (Python libs — tokens via ToolContext.state)
 
 INFRAESTRUCTURA GOOGLE CLOUD:
-  Agent Engine (Vertex AI) ← todos los 4 agentes Python
+  Agent Runtime (Gemini Enterprise Agent Platform) ← todos los 4 agentes Python
   Cloud Run                ← frontend Next.js + Playwright service (docker)
   Firestore                ← clientes, tokens cifrados, logs
   Secret Manager           ← ENCRYPTION_KEY, GOOGLE_CLIENT_SECRET
@@ -168,8 +170,8 @@ INFRAESTRUCTURA GOOGLE CLOUD:
 
 ### Decisión arquitectural clave: Web Analyzer en dos capas
 
-Agent Engine **no tiene Chromium** — es un sandbox Python puro. La solución es:
-- **Web Analyzer Agent** corre en Agent Engine como los demás agentes
+Agent Runtime **no tiene Chromium** — es un sandbox Python puro. La solución es:
+- **Web Analyzer Agent** corre en Agent Runtime como los demás agentes
 - Tiene una tool `analyze_site(url)` que hace HTTP POST al **Playwright Service**
 - **Playwright Service** es un microservicio FastAPI corriendo en Cloud Run con Docker + Chromium
 - El agente orquesta la lógica; el servicio ejecuta el browser
@@ -195,7 +197,7 @@ Esto mantiene toda la infraestructura en Google Cloud y resuelve la limitación 
 
 ### 5.1 Planner Agent (Orchestrador)
 **Archivo**: `agents/planner_agent/agent.py`
-**Modelo**: `gemini-3-flash-preview`
+**Modelo**: `gemini-3.5-flash`
 **Rol**: Punto de entrada. Interpreta el objetivo del consultor, coordina el trabajo de los demás agentes, consolida resultados y genera el plan final.
 
 **Herramientas**:
@@ -305,7 +307,7 @@ publish_version(account_id, container_id, workspace_id)
 
 ### 5.4 Web Analyzer Agent
 **Archivo**: `agents/web_analyzer_agent/agent.py`
-**Rol**: Orquestar el análisis del sitio web del cliente. El agente corre en Agent Engine; el browser headless corre en el Playwright Service (Cloud Run separado).
+**Rol**: Orquestar el análisis del sitio web del cliente. El agente corre en Agent Runtime; el browser headless corre en el Playwright Service (Cloud Run separado).
 
 **Por qué Playwright y no HTTP requests simples**:
 Los sitios modernos renderizan con JavaScript (React, Angular, Next.js). Un HTTP request solo ve HTML estático — sin GA4, sin GTM, sin dataLayer. Se necesita un browser real porque:
@@ -317,7 +319,7 @@ Los sitios modernos renderizan con JavaScript (React, Angular, Next.js). Un HTTP
 **Arquitectura en dos capas (DEFINITIVA)**:
 
 ```
-Web Analyzer Agent (Agent Engine)
+Web Analyzer Agent (Agent Runtime)
     ↓ tool call: analyze_site(url)
     ↓ HTTP POST https://playwright-service-xxxx.run.app/analyze
 Playwright Service (Cloud Run + Docker + Chromium)
@@ -421,20 +423,21 @@ playwright_service/          ← microservicio independiente (NO es un agente AD
 # Agentes
 from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent, LoopAgent
 
-# Tools
-from google.adk.tools import agent_tool          # AgentTool — sub-agente como tool
-from google.adk.tools import FunctionTool, ToolContext
+# Tools (ADK 2.x — sin @tool decorator, plain functions auto-wrapeadas)
+from google.adk.tools import ToolContext
+from google.adk.tools import FunctionTool
+from google.adk.tools.agent_tool import AgentTool  # sub-agente como tool
 
 # Skills
 from google.adk.skills import load_skill_from_dir
-from google.adk.tools import skill_toolset       # SkillToolset
+from google.adk.tools import SkillToolset
 
 # Auth
 from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
 ```
 
 > **IMPORTANTE**: `UnsafeLocalCodeExecutor` existe pero es **solo para desarrollo local**.
-> En Agent Engine no funciona — el sandbox no permite procesos externos.
+> En Agent Runtime no funciona — el sandbox no permite procesos externos.
 > En este proyecto NO se usa code execution del ADK: los agentes usan `@tool` functions
 > normales que llaman las APIs de Google directamente con `google-analytics-admin`, etc.
 
@@ -451,7 +454,7 @@ from .tools.ga4_admin_tools import (
 from .tools.ga4_data_tools import get_event_count_last_30_days
 
 root_agent = LlmAgent(
-    model="gemini-3-flash-preview",
+    model="gemini-3.5-flash",
     name="ga4_agent",
     description="Especialista en diagnóstico y configuración de Google Analytics 4.",
     instruction="""
@@ -548,7 +551,7 @@ def load_client_tokens(client_id: str, tool_context: ToolContext) -> dict:
     return {"status": "tokens_loaded"}
 
 root_agent = LlmAgent(
-    model="gemini-3-flash-preview",
+    model="gemini-3.5-flash",
     name="planner_agent",
     description="Orquestador del ecosistema de medición de Grapez Studio.",
     instruction="""
@@ -944,9 +947,9 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 OAUTH_REDIRECT_URI=http://localhost:3000/api/oauth/google/callback
 
-# Agent Engine
-AGENT_ENGINE_REGION=us-central1
-AGENT_ENGINE_PROJECT=grapez-hackathon
+# Gemini Enterprise Agent Platform (Agent Runtime)
+AGENT_RUNTIME_REGION=us-central1
+AGENT_RUNTIME_PROJECT=grapez-hackathon
 
 # Gemini
 GOOGLE_GEMINI_API_KEY=  # si se usa directo (no Vertex)
@@ -976,7 +979,7 @@ TEST_REFRESH_TOKEN=
 ### Servicios GCP usados
 | Servicio | Para qué | Costo estimado |
 |---|---|---|
-| Agent Engine (Vertex AI) | Hosting de los 5 agentes Python | Incluido en $500 crédito hackathon |
+| Agent Runtime (Gemini Enterprise) | Hosting de los 5 agentes Python | Incluido en $500 crédito hackathon |
 | Cloud Run | Frontend Next.js + Playwright Service | ~$5/mes |
 | Firestore | Base de datos (clientes, tokens, logs) | Free tier generoso |
 | Secret Manager | ENCRYPTION_KEY, GOOGLE_CLIENT_SECRET | ~$0.06/secret/mes |
@@ -1011,21 +1014,25 @@ gcloud run deploy playwright-service \
 # PLAYWRIGHT_SERVICE_URL=https://playwright-service-xxxx-uc.a.run.app
 ```
 
-### 2. Deploy agentes a Agent Engine
+### 2. Deploy agentes a Agent Runtime (Gemini Enterprise Agent Platform)
 ```bash
-# Habilitar APIs de Vertex AI necesarias
+# Habilitar APIs necesarias
 gcloud services enable aiplatform.googleapis.com cloudresourcemanager.googleapis.com
 
-# Deploy cada agente (el Planner importa los sub-agentes como módulos Python,
-# no como endpoints separados — se despliegan juntos en el mismo paquete)
-adk deploy agent_engine \
-  --project=grapez-hackathon \
-  --region=us-central1 \
-  --display_name="Grapez Planner Agent" \
-  agents/planner_agent
+# Instalar Agents CLI si no está instalado
+pip install google-agents-cli   # o: uvx google-agents-cli setup
 
-# Guardar el Agent Engine ID en .env:
-# PLANNER_AGENT_ENGINE_ID=projects/.../locations/us-central1/reasoningEngines/...
+# Deploy usando Agents CLI (reemplaza adk deploy agent_engine)
+agents-cli deploy \
+  --project=grapez-hackathon \
+  --region=us-central1
+
+# Registrar en Gemini Enterprise Agent Platform
+agents-cli publish gemini-enterprise \
+  --display_name="Grapez Planner Agent"
+
+# Guardar el Agent Runtime ID en .env:
+# PLANNER_AGENT_RUNTIME_ID=projects/.../locations/us-central1/reasoningEngines/...
 ```
 
 ### 3. Deploy frontend
@@ -1041,9 +1048,9 @@ gcloud run deploy grapez-hackathon-frontend \
 ### Orden de deploy (importante)
 1. Playwright Service → obtener URL
 2. Actualizar `.env` con `PLAYWRIGHT_SERVICE_URL`
-3. Deploy Planner Agent (incluye todos los sub-agentes) → obtener Agent Engine ID
-4. Actualizar `.env` con `PLANNER_AGENT_ENGINE_ID`
-5. Deploy Frontend (ya conoce el Agent Engine ID)
+3. Deploy Planner Agent con `agents-cli deploy` + `agents-cli publish gemini-enterprise` → obtener Agent Runtime ID
+4. Actualizar `.env` con `PLANNER_AGENT_RUNTIME_ID`
+5. Deploy Frontend (ya conoce el Agent Runtime ID)
 
 ---
 
@@ -1250,13 +1257,106 @@ Si eres Claude Code leyendo este archivo: bienvenido. La arquitectura está **co
 1. **Lee** la sección 19 (Decisiones Técnicas Verificadas) — ya resuelve todas las dudas
 2. **Lee** la sección completa del agente específico en este CLAUDE.md
 3. **Busca skills** en MCP Market (https://mcp.so) para el agente específico
-4. Instala: `pip install google-adk==1.33.0` — usar versión fija
+4. Instala: `pip install google-adk==2.1.0` — usar versión fija (no sin pin — hay breaking changes entre versiones)
 
-### Al construir herramientas de API (@tool functions)
-1. Los tokens van en `ToolContext.state` — NUNCA como parámetros en el método
+### Al construir herramientas de API (plain functions ADK 2.x)
+1. Los tokens van en `ToolContext.state` — NUNCA como parámetros que el LLM puede ver
 2. Siempre usar `Credentials` de `google.oauth2.credentials` con access + refresh token
 3. Manejar `google.auth.exceptions.RefreshError` — devolver mensaje claro al consultor
 4. Los nombres exactos de métodos de las APIs están en la sección de cada agente
+5. **Sin `@tool` decorator** — plain functions auto-wrapeadas por ADK (ver sección 19.1b)
+
+### Metodología Grapez — Guardrails de Confirmación (obligatorio en todos los agentes)
+
+Esta sección define cómo los agentes de Grapez se comportan diferente a un chatbot genérico: **nunca modifican sin confirmar, siempre diagnostican con contexto de negocio, y siguen el proceso consultivo de Grapez Studio**. Cada agente que construyas debe implementar los tres niveles descritos abajo.
+
+#### Los docstrings son contratos con Gemini, no comentarios para humanos
+
+ADK convierte el docstring de cada función en el campo `description` del JSON schema que Gemini lee para decidir cuándo y cómo llamar la función. Una restricción en el docstring es una instrucción directa al modelo:
+
+```python
+def create_conversion_event(property_id: str, event_name: str, tool_context: ToolContext) -> dict:
+    """
+    Marca un evento como conversión en GA4.
+    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    """
+```
+
+Gemini recibe: `"description": "Marca un evento como conversión en GA4.\nGUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action()."`. La restricción es una instrucción operativa para el modelo, no documentación decorativa.
+
+#### Arquitectura de 3 capas — implementar las 3 siempre
+
+**Capa 1 — Docstring (guía al LLM en su decisión)**
+Incluir en TODOS los write tools la línea de guardrail en el docstring:
+```
+GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+```
+
+**Capa 2 — Agent instruction (define el estilo consultivo)**
+La `instruction` de cada agente especialista debe tener una sección "AL IMPLEMENTAR" con reglas explícitas del orden y las restricciones. Ver ejemplos en ga4_agent/agent.py y gtm_agent/agent.py.
+
+**Capa 3 — State check en Python (bloqueo real, independiente del LLM)**
+Esta es la garantía real. El código Python verifica `tool_context.state.get("implementation_confirmed")` antes de ejecutar cualquier operación de escritura. Si el flag no está activo, la función **rechaza la operación independientemente de lo que el LLM decidió**. No confía en que Gemini siempre interprete bien las instrucciones.
+
+#### Patrón exacto — copiar al inicio de cada write tool
+
+```python
+# Copiar este bloque al inicio de TODA función que modifique datos en APIs externas
+if not tool_context.state.get("implementation_confirmed"):
+    return {
+        "blocked": True,
+        "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
+        "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción. El consultor debe ver un action_card A2UI antes de que se ejecute cualquier cambio.",
+    }
+tool_context.state["implementation_confirmed"] = False  # consumir el flag — una confirmación = una acción
+```
+
+#### Flujo de confirmación end-to-end
+
+```
+1. GA4/GTM Agent diagnostica → devuelve hallazgos al Planner (texto con clasificación ✅/⚠️/❌)
+2. Planner consolida → incluye A2UI action_card en su respuesta para cada acción propuesta:
+      {"__a2ui": true, "type": "action_card", "title": "Crear conversión 'purchase'", ...}
+3. Consultor ve la card → responde "Confirmo" o "Cancelo"
+4. Planner detecta "Confirmo" → llama confirm_action(action_description="Crear conversión purchase en GA4-123456")
+      → confirm_action() setea tool_context.state["implementation_confirmed"] = True
+5. Planner llama ga4_agent o gtm_agent con instrucción específica de implementación
+6. Sub-agente llama la write tool (ej: create_conversion_event)
+7. Write tool verifica implementation_confirmed == True → ejecuta la API call
+8. Write tool resetea implementation_confirmed = False (la confirmación se consume)
+9. Sub-agente reporta resultado al Planner
+10. Planner reporta al consultor → genera siguiente action_card si hay más acciones pendientes
+```
+
+La tool `confirm_action` vive en `agents/planner_agent/tools/client_tools.py`. Solo el Planner la llama — los sub-agentes nunca la invocan directamente.
+
+#### Si el agente no puede determinar el contexto del cliente
+
+Antes de diagnosticar, el agente debe tener contexto del tipo de negocio del cliente para saber qué conversiones son críticas (ecommerce → purchase; lead gen → form_submit; SaaS → signup, trial_start). Si este contexto no está disponible:
+
+1. El Planner pregunta al consultor al inicio: "¿Cuál es el modelo de negocio del cliente? (ecommerce, generación de leads, SaaS, otro)"
+2. El consultor responde → el Planner guarda en `tool_context.state["business_type"]`
+3. Los agentes GA4 y GTM leen ese contexto para priorizar los hallazgos correctos
+
+Si el agente recibe respuestas vacías o errores de la API que le impiden diagnosticar completamente, **debe declararlo explícitamente** — nunca asume ni inventa datos.
+
+#### Estilo consultivo Grapez — cómo debe sonar cada agente
+
+Todos los agentes comunican como consultores senior de Grapez Studio. No son APIs que reportan datos en crudo.
+
+**NO** (estilo técnico frío — inaceptable):
+> "event_data_retention: TWO_MONTHS, is_recommended: false"
+
+**SÍ** (estilo Grapez — obligatorio):
+> "❌ **Retención de datos en 2 meses** — GA4 borrará el historial de usuarios cada 60 días. Consecuencia directa: no podrás comparar temporadas completas ni analizar el ciclo de vida de tus clientes. Acción recomendada: configurar en 14 meses."
+
+Reglas del estilo Grapez para incluir en la `instruction` de cada agente:
+1. **Hallazgo + impacto en negocio**: no solo qué está mal, sino qué consecuencia tiene para el cliente
+2. **Clasificación obligatoria**: `✅ Correcto` | `⚠️ Mejorable` | `❌ Crítico` — siempre una de las tres
+3. **Prioridad por revenue**: conversiones (afectan decisiones de inversión) > retención (afectan análisis histórico) > configuración menor
+4. **Accionable**: decir qué hacer, no solo qué está mal. "Configura retención en 14 meses" — no "La retención está en 2 meses"
+5. **Español profesional**: nunca inglés técnico sin traducir, nunca jerga sin contexto
+6. **Nunca inventar**: si la API devuelve error o vacío, reportarlo — no asumir configuración por defecto
 
 ### Al construir el frontend
 1. No hay paquete npm `@google/a2ui` — implementar renderer custom (ver sección 7)
@@ -1282,7 +1382,7 @@ Si eres Claude Code leyendo este archivo: bienvenido. La arquitectura está **co
 
 ### Restricciones absolutas (nunca sin aprobación)
 - No cambiar la arquitectura de 5 agentes
-- No usar modelo distinto a `gemini-3-flash-preview`
+- No usar modelo distinto a `gemini-3.5-flash` (ver sección 19.3)
 - No guardar tokens OAuth sin encriptación Fernet
 - No publicar versiones de GTM directamente — siempre crear borrador primero
 - No escribir en GA4 Demo Account (solo lectura)
@@ -1291,43 +1391,93 @@ Si eres Claude Code leyendo este archivo: bienvenido. La arquitectura está **co
 
 ## 18. Links de Referencia
 
-| Recurso | URL |
-|---|---|
-| Google ADK Docs | https://google.github.io/adk-docs/ |
-| ADK Multi-agents | https://adk.dev/agents/multi-agents/ |
-| ADK Skills | https://adk.dev/skills/ |
-| ADK Auth | https://adk.dev/tools-custom/authentication/ |
-| Agent Engine Deploy | https://adk.dev/deploy/agent-engine/ |
-| Agent Engine — Use ADK | https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/use/adk |
-| A2UI Repo | https://github.com/google/A2UI |
-| A2UI Blog | https://developers.googleblog.com/introducing-a2ui-an-open-project-for-agent-driven-interfaces/ |
-| Playwright Docker Images | https://mcr.microsoft.com/en-us/product/playwright/python/about |
-| Playwright en Cloud Run | https://playwright.dev/python/docs/docker |
-| GA4 Admin API (Python) | https://googleapis.dev/python/google-analytics-admin/latest/ |
-| GTM API v2 | https://developers.google.com/tag-manager/api/v2 |
-| Google Ads API Python | https://github.com/googleads/google-ads-python |
-| Hackathon Devpost | https://googleforstartups-aiagents.devpost.com |
-| MCP Market | https://mcp.so |
-| analytics-tracking skill | https://mcp.so/server/analytics-tracking |
+> **NOTA**: `google.github.io/adk-docs/` redirige permanentemente a `adk.dev/` desde mayo 2026. Usar siempre `adk.dev/`.
+
+### ADK 2.x — Documentación oficial (verificada 26 mayo 2026)
+
+| Recurso | URL | Para qué |
+|---|---|---|
+| ADK Docs (sitio principal) | https://adk.dev/ | Punto de entrada — redirige desde google.github.io/adk-docs |
+| ADK LlmAgent | https://adk.dev/agents/llm-agents/ | Clase principal, parámetros, ejemplos |
+| ADK Multi-agents | https://adk.dev/agents/multi-agents/ | AgentTool, ParallelAgent, orquestación |
+| ADK Custom Tools | https://adk.dev/tools-custom/ | ToolContext, plain functions, FunctionTool |
+| ADK Function Tools | https://adk.dev/tools-custom/function-tools/ | Patrón sin @tool decorator (ADK 2.x) |
+| ADK State & Session | https://adk.dev/sessions/state/ | Cómo leer/escribir tool_context.state |
+| ADK Skills | https://adk.dev/skills/ | SkillToolset, load_skill_from_dir |
+| ADK Auth | https://adk.dev/tools-custom/authentication/ | OAuth2, AuthCredential |
+| ADK 2.0 Migration | https://adk.dev/2.0/ | Breaking changes 1.x → 2.0 |
+| ADK Callbacks | https://adk.dev/callbacks/ | BeforeAgentCallback, AfterAgentCallback (reemplazan override de métodos internos) |
+| google-adk PyPI | https://pypi.org/project/google-adk/ | Versión latest, changelog |
+| adk-python GitHub | https://github.com/google/adk-python | Releases, CHANGELOG.md, issues |
+| adk-python Releases | https://github.com/google/adk-python/releases | Notas de cada versión |
+
+### Gemini Models
+
+| Recurso | URL | Para qué |
+|---|---|---|
+| Gemini 3.5 Flash (DeepMind) | https://deepmind.google/models/gemini/flash/ | Model card oficial, capacidades |
+| Gemini 3.5 Flash (Model Card) | https://deepmind.google/models/model-cards/gemini-3-5-flash/ | Especificaciones técnicas |
+| Gemini API Models | https://ai.google.dev/gemini-api/docs/models | IDs de todos los modelos disponibles |
+| Gemini I/O 2026 Blog | https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5/ | Anuncio de Gemini 3.5 |
+
+### Agents CLI y Agent Platform
+
+| Recurso | URL | Para qué |
+|---|---|---|
+| Agent Runtime Deploy (Agents CLI) | https://docs.cloud.google.com/gemini-enterprise-agent-platform/agents/quickstart-adk | Deploy a Agent Runtime |
+| Agents CLI — GitHub | https://github.com/google/agents-cli | Código fuente, issues |
+| Agents CLI — Docs | https://google.github.io/agents-cli/ | Comandos: create, deploy, publish, eval |
+| Agent Studio — Docs | https://docs.cloud.google.com/gemini-enterprise-agent-platform/agent-studio/overview | Prototipado visual de instrucciones |
+| Gemini Enterprise Agent Platform | https://cloud.google.com/products/gemini-enterprise-agent-platform | Página del producto (Agent Runtime) |
+
+### APIs Google (Analytics, GTM, Ads)
+
+| Recurso | URL | Para qué |
+|---|---|---|
+| GA4 Admin API (Python) | https://googleapis.dev/python/google-analytics-admin/latest/ | Métodos exactos: list_properties, create_conversion_event, etc. |
+| GA4 Data API (Python) | https://googleapis.dev/python/google-analytics-data/latest/ | run_report, RunReportRequest, DateRange |
+| GTM API v2 | https://developers.google.com/tag-manager/api/v2 | Referencia completa de endpoints GTM |
+| Google Ads API Python | https://github.com/googleads/google-ads-python | Librería oficial |
+
+### A2UI, Playwright, Infraestructura
+
+| Recurso | URL | Para qué |
+|---|---|---|
+| A2UI Repo | https://github.com/google/A2UI | Protocolo oficial, spec JSON |
+| A2UI Blog | https://developers.googleblog.com/introducing-a2ui-an-open-project-for-agent-driven-interfaces/ | Contexto del protocolo |
+| Playwright Docker Images | https://mcr.microsoft.com/en-us/product/playwright/python/about | Imagen base para Playwright Service |
+| Playwright en Cloud Run | https://playwright.dev/python/docs/docker | Deploy Chromium en Cloud Run |
+
+### Hackathon
+
+| Recurso | URL | Para qué |
+|---|---|---|
+| Hackathon Devpost | https://googleforstartups-aiagents.devpost.com | Reglas, submit, team registration |
+| MCP Market | https://mcp.so | Buscar skills (analytics-tracking, GTM, etc.) |
+| analytics-tracking skill | https://mcp.so/server/analytics-tracking | Skill principal para GA4 + GTM agents |
 
 ---
 
 ## 19. Decisiones Técnicas Verificadas
 
-> **Esta sección resuelve todas las deudas técnicas.** Investigación realizada el 11 de mayo 2026.
-> No hay pendientes de investigación — todas las decisiones están tomadas y justificadas.
+> **Esta sección resuelve todas las deudas técnicas.**
+> Última actualización: **26 de mayo 2026** — ADK 2.1.0, gemini-3.5-flash, sin @tool decorator.
+> Investigación inicial: 11 de mayo 2026.
 
 ### 19.1 Google ADK — Versión y Imports
 
-**Versión**: `google-adk==1.33.0` (lanzada 8 mayo 2026)
+**Versión**: `google-adk==2.1.0` (lanzada 23 mayo 2026 — **usar esta versión**)
 
-**Imports verificados**:
+> ADK 2.0 GA lanzado el 19 mayo 2026 con breaking changes. Versión 1.33.0 queda obsoleta.
+
+**Imports verificados (ADK 2.x)**:
 ```python
 from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent, LoopAgent
-from google.adk.tools import agent_tool          # AgentTool
-from google.adk.tools import FunctionTool, ToolContext
+from google.adk.tools import ToolContext          # inyectado automáticamente por ADK
+from google.adk.tools import FunctionTool         # wrapper explícito (opcional en 2.x)
+from google.adk.tools.agent_tool import AgentTool # sub-agente como tool
 from google.adk.skills import load_skill_from_dir
-from google.adk.tools import skill_toolset       # SkillToolset
+from google.adk.tools import SkillToolset
 from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
 ```
 
@@ -1339,17 +1489,46 @@ from google.adk.auth import AuthCredential, AuthCredentialTypes, OAuth2Auth
 
 ---
 
-### 19.2 Agent Engine — Deploy y Streaming
+### 19.1b ADK 2.x — Patrón correcto de tools (sin @tool decorator)
 
-**Qué es**: Runtime managed de Vertex AI para agentes ADK. Antes llamado "Reasoning Engine". Endpoint regional en `us-central1-aiplatform.googleapis.com`.
+> **Breaking change ADK 2.0**: El decorator `@tool` de `google.adk.tools` fue eliminado.
+> Las funciones plain Python son auto-wrapeadas por ADK al pasarlas a `tools=[]`.
+> **NUNCA** usar `from google.adk.tools import tool` — ese import ya no existe en 2.x.
 
-**Comando de deploy verificado**:
+```python
+# ✅ CORRECTO en ADK 2.x — plain function, ToolContext inyectado automáticamente
+from google.adk.tools import ToolContext
+
+def list_properties(account_id: str, tool_context: ToolContext) -> dict:
+    """Lista propiedades GA4. No incluir tool_context en el docstring."""
+    tokens = tool_context.state.get("access_token")
+    # ...
+
+root_agent = LlmAgent(
+    model="gemini-3.5-flash",
+    tools=[list_properties],  # ADK auto-wrapea la función como FunctionTool
+)
+
+# ❌ INCORRECTO en ADK 2.x — @tool decorator eliminado
+from google.adk.tools import tool  # ImportError en ADK 2.x
+@tool
+def list_properties(...): ...
+```
+
+### 19.2 Agent Runtime (Gemini Enterprise Agent Platform) — Deploy y Streaming
+
+**Qué es**: El runtime managed para agentes ADK. Antes llamado "Agent Engine" / "Reasoning Engine", ahora es "Agent Runtime" dentro de la **Gemini Enterprise Agent Platform** (renombrado en Google Cloud Next '26, abril 2026). Mismo servicio, nueva marca. Endpoint regional en `us-central1-aiplatform.googleapis.com`.
+
+**Comando de deploy verificado (Agents CLI)**:
 ```bash
-adk deploy agent_engine \
-  --project=grapez-hackathon \
-  --region=us-central1 \
-  --display_name="Grapez Planner Agent" \
-  agents/planner_agent
+# Desde la raíz del proyecto
+agents-cli deploy \
+  --project=grapez-ecosistema-medicion \
+  --region=us-central1
+
+# Registrar en el catálogo de Gemini Enterprise
+agents-cli publish gemini-enterprise \
+  --display_name="Grapez Planner Agent"
 ```
 
 **SSE confirmado**: Soporta streaming nativo via `streamQuery?alt=sse`. El frontend consume el stream directamente.
@@ -1362,16 +1541,17 @@ adk deploy agent_engine \
 
 ### 19.3 Modelo Gemini
 
-**ID confirmado**: `gemini-3-flash-preview` — válido en Vertex AI desde diciembre 2025.
+**ID confirmado**: `gemini-3.5-flash` — GA en Gemini Enterprise Agent Platform desde abril 2026. El sufijo `-preview` ya no aplica.
 
 **Otros modelos disponibles**:
 | ID | Estado | Usar si... |
 |---|---|---|
-| `gemini-3-flash-preview` | Public Preview | ← **el que usamos** |
-| `gemini-2.5-flash` | Stable | Se necesita estabilidad en producción |
+| `gemini-3.5-flash` | **GA** | ← **el que usamos** |
+| `gemini-3.1-flash` | Preview | Versión con multimodal mejorado (imagen) |
+| `gemini-3.1-pro` | GA | Se necesita máxima capacidad de razonamiento |
 | `gemini-2.0-flash` | **DESCONTINUADO** | ❌ NO usar — apagado junio 1, 2026 |
 
-**Acceso**: Via Vertex AI con Application Default Credentials (service account). No se necesita API key separada si `GOOGLE_APPLICATION_CREDENTIALS` está configurado.
+**Acceso**: Via Gemini Enterprise Agent Platform con Application Default Credentials. No se necesita API key separada si ADC está configurado (`gcloud auth application-default login`).
 
 ---
 
@@ -1434,7 +1614,7 @@ access_token = tool_context.state.get("access_token")
 | Code execution | `UnsafeLocalCodeExecutor` en producción | NO se usa — @tool functions con APIs directas |
 | A2UI integración | Buscar `@google/a2ui` en npm | Renderer custom React/Tailwind ~200 líneas |
 | OAuth en agentes | Tokens como parámetros de función | `ToolContext.state` (propagación automática) |
-| Modelo | Verificar si `gemini-3-flash-preview` existe | Confirmado y válido |
+| Modelo | Verificar si `gemini-3.5-flash` existe | Confirmado y válido |
 | `SkillToolset` | Por confirmar | Confirmado — `from google.adk.tools import skill_toolset` |
 | Deploy Web Analyzer | Sin definir | Playwright Service en Cloud Run con Docker 2Gi |
 | Deploy agentes | Agentes separados | Un solo deploy del Planner (importa sub-agentes como módulos) |
@@ -1442,6 +1622,11 @@ access_token = tool_context.state.get("access_token")
 | MCP integration | Sin definir | analytics-tracking skill via MCP Market (obligatorio Track 1) |
 | Deadline hora | 11:59 PM PT (incorrecto) | **5:00 PM PT** (reglas oficiales) |
 | Google Ads Agent | Incluido (agente 4 de 6) | **Eliminado** — carga > valor para el hackathon |
+| Deploy tool | `adk deploy agent_engine` | `agents-cli deploy` + `agents-cli publish gemini-enterprise` |
+| Platform naming | "Vertex AI Agent Engine" | "Gemini Enterprise Agent Platform (Agent Runtime)" |
+| Model ID | `gemini-3.5-flash` (era `-preview`) | `gemini-3.5-flash` — GA desde abril 2026 |
+| Agents CLI skills | Sin instalar | **Instaladas en Claude Code** — 7 skills ADK (mayo 14, 2026) |
+| Agent Studio | No considerado | Prototipado de instrucciones + mención en video |
 
 ---
 
@@ -1451,7 +1636,7 @@ access_token = tool_context.state.get("access_token")
 
 **Por qué**: Elimina ~4 días de desarrollo (Firestore token schema, Fernet encryption, refresh middleware). El resultado demo es más fuerte: los jueces ven el flujo OAuth real con los 5 scopes de Google. La arquitectura de producción (Firestore + Fernet) está documentada en sección 8 y se implementa post-hackathon.
 
-**Impacto en el Planner Agent**: El `load_client_tokens` en Section 6 (que leía de Firestore) se reemplaza por una versión que recibe `access_token` y `refresh_token` como parámetros pasados desde el frontend via `initialState` del Agent Engine session.
+**Impacto en el Planner Agent**: El `load_client_tokens` en Section 6 (que leía de Firestore) se reemplaza por una versión que recibe `access_token` y `refresh_token` como parámetros pasados desde el frontend via `initialState` del Agent Runtime session.
 
 ---
 
@@ -1474,6 +1659,58 @@ access_token = tool_context.state.get("access_token")
 **Por qué**: El demo del video es más convincente si el juez ve una lista de clientes existentes (simula uso real del producto) antes de entrar al chat en vivo con la cuenta real.
 
 **Restricción**: Los datos mock deben ser claramente ficticios (Tienda Demo, Cliente Prueba, etc.) — no datos reales de clientes de Grapez Studio.
+
+---
+
+### 19.11 Nuevas herramientas — Agents CLI y Agent Studio (kickoff mayo 14, 2026)
+
+> Anunciadas en Google Cloud Next '26 (abril 22, 2026). Adoptadas en este proyecto desde Semana 3.
+
+#### Agents CLI
+
+**Qué es**: CLI + paquete de skills para el ciclo completo de desarrollo de agentes ADK. Diseñado específicamente para funcionar con coding agents (Claude Code, Gemini CLI, Copilot).
+
+**Instalación (ya hecho en Claude Code)**:
+```bash
+npx skills add google/agents-cli   # instala 7 skills en Claude Code
+pip install google-agents-cli      # instala CLI en el sistema
+```
+
+**7 skills instaladas en Claude Code**:
+| Skill | Qué cubre |
+|---|---|
+| `google-agents-cli-workflow` | Flujo de trabajo completo ADLC |
+| `google-agents-cli-adk-code` | ADK Python API — código de agentes |
+| `google-agents-cli-scaffold` | Scaffolding de proyectos ADK |
+| `google-agents-cli-eval` | Evaluación de agentes |
+| `google-agents-cli-deploy` | Deploy a Agent Runtime / Cloud Run / GKE |
+| `google-agents-cli-publish` | Registro en Gemini Enterprise |
+| `google-agents-cli-observability` | Cloud Trace, métricas, logs |
+
+**Comandos clave**:
+```bash
+agents-cli create grapez-planner --prototype --yes  # scaffold
+agents-cli install                                   # instalar deps
+agents-cli run "diagnostica GA4 de TiendaDemo"      # test local
+agents-cli eval run                                  # evaluación
+agents-cli deploy                                    # deploy a Agent Runtime
+agents-cli publish gemini-enterprise --display_name="Grapez Planner Agent"
+```
+
+**Impacto en el proyecto**: Reemplaza `adk deploy agent_engine`. Más simple y mejor integrado con la plataforma. Claude Code tiene ahora conocimiento especializado de ADK via las 7 skills.
+
+#### Agent Studio
+
+**Qué es**: UI visual low-code dentro de Gemini Enterprise Agent Platform para diseñar instrucciones del sistema, comparar configuraciones de agentes, y prototipado.
+
+**Relación con ADK**: Complementario, no reemplaza. ADK es code-first; Agent Studio es para iterar instrucciones visualmente antes de hardcodearlas en Python.
+
+**Uso recomendado en el proyecto**:
+- Mauro usa Agent Studio para diseñar y refinar las instrucciones del Planner Agent visualmente
+- Juan Camilo copia las instrucciones refinadas al código Python
+- **Mostrar en el video demo**: "diseñamos las instrucciones del agente en Agent Studio" → suma en Innovation
+
+**Cómo mencionar en Devpost**: "We prototyped agent instructions in Agent Studio (Gemini Enterprise Agent Platform) and implemented the final agents with ADK, deployed via Agents CLI to Agent Runtime."
 
 ---
 
