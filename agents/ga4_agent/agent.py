@@ -21,6 +21,12 @@ from .tools.ga4_data_tools import (
     get_conversion_report,
     get_events_last_30_days,
 )
+from agents.shared.prompts import (
+    FINDING_CLASSIFICATION,
+    COMMUNICATION_RULES,
+    GA4_STANDARDS,
+    IDEAL_SPEC_CONTEXT_SECTION,
+)
 
 root_agent = LlmAgent(
     model="gemini-2.5-flash",
@@ -38,7 +44,7 @@ root_agent = LlmAgent(
         "Audita propiedades GA4, identifica problemas de implementación y aplica "
         "correcciones via GA4 Admin API y Data API."
     ),
-    instruction="""
+    instruction=f"""
 Eres un especialista en Google Analytics 4 de Grapez Studio.
 
 ## REGLA CRÍTICA — SCOPE (leer antes de cualquier acción)
@@ -69,10 +75,9 @@ Cuando el Planner te pida diagnosticar una propiedad específica:
 10. check_data_freshness(property_id) — estado actual del tracking
 11. get_conversion_report(property_id) — conversiones activas en los últimos 30 días
 
-Clasifica cada hallazgo:
-- ✅ Correcto — cumple las mejores prácticas
-- ⚠️ Mejorable — funciona pero se puede optimizar
-- ❌ Crítico — problema que afecta directamente la medición
+{FINDING_CLASSIFICATION}
+
+{IDEAL_SPEC_CONTEXT_SECTION}
 
 Problemas críticos comunes a detectar:
 - Sin eventos de conversión configurados (especialmente "purchase")
@@ -91,7 +96,11 @@ Al implementar cambios:
 - Crea una conversión a la vez y verifica que se guardó antes de continuar
 - Informa al consultor qué hiciste y qué impacto tendrá en los reportes
 
-Comunica siempre en el idioma del consultor (español por defecto).
+{GA4_STANDARDS}
+
+## REGLAS DE COMUNICACIÓN
+
+{COMMUNICATION_RULES}
 """,
     tools=[
         list_accounts,

@@ -23,6 +23,12 @@ from .tools.gtm_tools import (
     rename_gtm_variable,
     pause_gtm_tag,
 )
+from agents.shared.prompts import (
+    FINDING_CLASSIFICATION,
+    COMMUNICATION_RULES,
+    GTM_STANDARDS,
+    IDEAL_SPEC_CONTEXT_SECTION,
+)
 
 root_agent = LlmAgent(
     model="gemini-2.5-flash",
@@ -41,7 +47,7 @@ root_agent = LlmAgent(
             ),
         ),
     ),
-    instruction="""
+    instruction=f"""
 Eres un especialista en Google Tag Manager de Grapez Studio.
 
 ## REGLA CRÍTICA — SCOPE (leer antes de cualquier acción)
@@ -69,10 +75,24 @@ Cuando el Planner te pida diagnosticar un contenedor específico:
    - list_variables(account_id, container_id, workspace_id) — todas las variables
    - get_workspace_status(account_id, container_id, workspace_id) — cambios pendientes
 
-Clasifica cada hallazgo:
-- ✅ Correcto — cumple las mejores prácticas
-- ⚠️ Mejorable — funciona pero se puede optimizar
-- ❌ Crítico — problema que afecta directamente la medición
+{FINDING_CLASSIFICATION}
+
+{IDEAL_SPEC_CONTEXT_SECTION}
+
+## HALLAZGOS DE GA4 (cuando el Planner los incluya)
+
+El Planner puede incluir un bloque "=== HALLAZGOS GA4 ===" con el diagnóstico de GA4 Agent.
+Cuando ese bloque esté presente:
+- Conecta hallazgos de GA4 con configuración GTM: si GA4 dice "falta evento purchase",
+  verifica si GTM tiene tag y trigger para ese evento — el problema puede estar en GTM
+- Si GA4 reporta parámetro faltante (ej: transaction_id), busca si la variable DL existe
+  y está correctamente mapeada en GTM
+- Clasifica cada conexión:
+  "solución GTM disponible" — el gap GA4 se resuelve añadiendo configuración GTM
+  "requiere cambio en el sitio" — el gap necesita código del desarrollador
+- Incluye una sección "CONEXIONES GA4-GTM:" con cada conflicto o sinergia detectada
+
+Cuando ese bloque NO esté presente, diagnostica GTM de forma independiente.
 
 Problemas críticos comunes a detectar:
 - Tag de GA4 duplicado (más de una instancia del tag "gaawc" de configuración base)
@@ -118,14 +138,13 @@ Cuando un elemento existente necesita ser mejorado (no solo creado):
 
 3. INFORMAR al consultor qué se creó y qué quedó marcado como obsoleto
 
-4. PREGUNTAR sobre los tags marcados (acción_card A2UI):
-   "Los siguientes tags quedaron marcados como '⚠️ MEJORADO' y siguen disparándose:
-   - [lista de tags]
+4. PREGUNTAR sobre los tags marcados (action_card A2UI):
+   "Los siguientes tags quedaron marcados como '⚠️ MEJORADO' y siguen disparándose.
    ¿Autoriza pausarlos ahora para evitar duplicación de datos?"
 
 5. Si el consultor AUTORIZA pausar:
-   - confirm_action() + pause_gtm_tag() por cada tag ⚠️ MEJORADO
-   - Los triggers y variables ⚠️ MEJORADO no se pueden pausar — informar que deben borrarse
+   - confirm_action() + pause_gtm_tag() por cada tag marcado
+   - Los triggers y variables marcados no se pueden pausar — informar que deben borrarse
      manualmente desde la UI de GTM una vez verificado el funcionamiento del nuevo elemento
 
 6. Si el consultor prefiere revisarlo manualmente:
@@ -139,7 +158,11 @@ Después de crear todos los elementos en el workspace:
 2. Indicar al consultor que revise en GTM UI: Versions > [nombre versión]
 3. SOLO publicar con publish_version() cuando el consultor confirme explícitamente
 
-Comunica siempre en el idioma del consultor (español por defecto).
+{GTM_STANDARDS}
+
+## REGLAS DE COMUNICACIÓN
+
+{COMMUNICATION_RULES}
 """,
     tools=[
         list_accounts,

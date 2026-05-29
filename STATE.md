@@ -7,8 +7,8 @@
 ## Estado Actual
 
 **Fase**: 3 — Construcción activa. Semana 4 en curso (May 24-30).
-**Última sesión**: 27 de mayo 2026 (Sesión 6)
-**Próximo paso**: Probar `adk web agents/planner_agent` con cuenta real de Grapez Studio — flujo completo scope selection → diagnóstico GA4 + GTM
+**Última sesión**: 29 de mayo 2026 (Sesión 7)
+**Próximo paso**: Implementation Agent (GA4+GTM writes + confirmation flow) + Playwright Service Docker
 
 ---
 
@@ -111,6 +111,31 @@
 - Resuelto: Modelo gemini-3-flash-preview confirmado válido
 - Resuelto: Deploy — orden y comandos verificados
 - Todas las deudas técnicas eliminadas — arquitectura lista para construir
+
+### Sesión 7 — 29 de mayo 2026
+
+- **Web Analyzer Agent construido** (`agents/web_analyzer_agent/agent.py`):
+  - Estructura dual: `current_state` (qué hay) + `ideal_spec` (qué debería haber)
+  - Respuesta JSON estructurada con `ambiguities` para preguntas al consultor
+  - Maneja caso sin Playwright: infiere del contexto del negocio con marcador "[INFERIDO]"
+  - `agents/web_analyzer_agent/tools/` creado (vacío — Playwright tools pendientes Semana 4)
+
+- **Módulo compartido de prompts** (`agents/shared/prompts.py`):
+  - `GA4_STANDARDS` — límites técnicos, naming de eventos, P0 por tipo de negocio, checklist pre-lanzamiento
+  - `GTM_STANDARDS` — nomenclatura obligatoria, restricciones JS (ES5 solo), reglas dataLayer, workflow deploy
+  - `IDEAL_SPEC_CONTEXT_SECTION` — instrucción para GA4/GTM de usar el ideal_spec del Web Analyzer en gap analysis
+  - `A2UI_FORMAT_EXAMPLES`, `SUMMARY_CARD_FORMAT`, `FINDING_CLASSIFICATION`, `COMMUNICATION_RULES`
+
+- **Planner Agent actualizado**:
+  - Integra `web_analyzer_tool` como AgentTool (junto a ga4_tool, gtm_tool)
+  - Dos nuevas tools: `set_audit_mode` (auditoria | auditoria_implementacion) y `save_ideal_spec`
+  - Flujo: Web Analyzer genera ideal_spec → Planner lo guarda en state → GA4/GTM lo usan para gap analysis
+
+- **client_tools.py actualizado**:
+  - `set_audit_mode()` — registra modo de trabajo elegido al inicio
+  - `save_ideal_spec()` — propaga ideal_spec del Web Analyzer a GA4/GTM via session.state
+
+- **Cambios sin commitear**: 5 archivos modificados + `agents/shared/` + `agents/web_analyzer_agent/__init__.py` + `agents/web_analyzer_agent/tools/`
 
 ### Sesión 6 — 27 de mayo 2026
 
