@@ -41,3 +41,6 @@ logs/
 # Demo data (puede contener info real)
 demo/output/
 demo/*.json
+
+# ADK runtime artifacts
+.adk/
