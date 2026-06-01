@@ -61,7 +61,7 @@ def confirm_action(action_description: str, tool_context: ToolContext) -> dict:
 def set_business_context(
     business_type: str,
     website_url: str,
-    key_conversions: list,
+    key_conversions: list | str,
     tool_context: ToolContext,
 ) -> dict:
     """
@@ -75,7 +75,8 @@ def set_business_context(
         website_url:   URL del sitio web del cliente (ej: "https://mitienda.com").
                        Requerida para que el Web Analyzer pueda crawlear el sitio.
         key_conversions: Lista de 2-3 acciones clave que el consultor quiere trackear
-                         (ej: ["compra completada", "registro de usuario"]).
+                 (ej: ["compra completada", "registro de usuario"]).
+                 Si llega como string (ej: desde un LLM), se normaliza a list[str].
     """
     valid_types = {"ecommerce", "lead_generation", "saas", "marketplace", "media", "otro"}
     if business_type.lower() not in valid_types:
@@ -87,17 +88,35 @@ def set_business_context(
         return {
             "error": "website_url inválida. Debe comenzar con 'http://' o 'https://'.",
         }
-    if not key_conversions:
+    # Normaliza key_conversions a list[str] y valida su estructura.
+    if isinstance(key_conversions, str):
+        normalized_conversions = [item.strip() for item in key_conversions.split(",") if item.strip()]
+    elif isinstance(key_conversions, list):
+        normalized_conversions = []
+        for item in key_conversions:
+            if not isinstance(item, str):
+                return {
+                    "error": "key_conversions debe contener solo strings.",
+                }
+            cleaned = item.strip()
+            if cleaned:
+                normalized_conversions.append(cleaned)
+    else:
+        return {
+            "error": "key_conversions inválido. Debe ser list[str] o string separado por comas.",
+        }
+
+    if not normalized_conversions:
         return {
             "error": "key_conversions no puede estar vacío. Pide al consultor al menos 1 conversión clave.",
         }
     tool_context.state["business_type"] = business_type.lower()
     tool_context.state["website_url"] = website_url
-    tool_context.state["key_conversions"] = key_conversions
+    tool_context.state["key_conversions"] = normalized_conversions
     return {
         "business_type": business_type.lower(),
         "website_url": website_url,
-        "key_conversions": key_conversions,
+        "key_conversions": normalized_conversions,
         "message": "Contexto del negocio guardado. URL lista para Web Analyzer.",
     }
 

@@ -1,4 +1,4 @@
-"""Fragmentos de instrucción compartidos entre los agentes GA4, GTM y Planner."""
+"""Fragmentos de instrucción compartidos entre los agentes GA4, GTM, Web Analyzer y Planner."""
 
 FINDING_CLASSIFICATION = """Clasifica cada hallazgo:
 - ✅ Correcto — cumple las mejores prácticas
@@ -176,7 +176,7 @@ JavaScript en Custom HTML Tags y Custom JS Variables — solo ES5:
   SÍ usar: var, function() {}, string + concatenation
 
 Expresiones regulares — formato RE2, no JavaScript estándar:
-  NO soportado: lookahead (?=), lookbehind (?<=), backreferences (\1)
+  NO soportado: lookahead (?=), lookbehind (?<=), backreferences (\\1)
   SÍ soportado: clases de caracteres, cuantificadores, anchors (^, $)
 
 ## DATA LAYER — REGLAS CRÍTICAS

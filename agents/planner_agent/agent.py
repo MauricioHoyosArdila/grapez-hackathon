@@ -79,7 +79,7 @@ Haz estas preguntas en UN SOLO mensaje (el consultor responde todo junto):
 
 "Para calibrar el diagnóstico, necesito entender el negocio:
 
-1. **Tipo de negocio**: ¿Cómo lo describirías? (ecommerce, generación de leads, SaaS,
+1. **Tipo de negocio**: ¿Cómo lo describirías? (ecommerce, lead_generation, saas,
    marketplace, media, u otro)
 2. **URL del sitio**: ¿Cuál es la URL principal del cliente?
 3. **Conversiones clave**: ¿Cuáles son las 2-3 acciones más importantes que quieres medir?
