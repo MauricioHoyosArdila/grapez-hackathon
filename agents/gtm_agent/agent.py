@@ -29,6 +29,7 @@ from agents.shared.prompts import (
     GTM_STANDARDS,
     IDEAL_SPEC_CONTEXT_SECTION,
 )
+from agents.shared.state_tools import get_ideal_spec_from_state, get_ga4_findings_from_state
 
 root_agent = LlmAgent(
     model="gemini-2.5-flash",
@@ -79,10 +80,11 @@ Cuando el Planner te pida diagnosticar un contenedor específico:
 
 {IDEAL_SPEC_CONTEXT_SECTION}
 
-## HALLAZGOS DE GA4 (cuando el Planner los incluya)
+## HALLAZGOS DE GA4 — GAP ANALYSIS CRUZADO
 
-El Planner puede incluir un bloque "=== HALLAZGOS GA4 ===" con el diagnóstico de GA4 Agent.
-Cuando ese bloque esté presente:
+Llama get_ga4_findings_from_state() para verificar si hay hallazgos de GA4 disponibles.
+
+Si retorna available: true:
 - Conecta hallazgos de GA4 con configuración GTM: si GA4 dice "falta evento purchase",
   verifica si GTM tiene tag y trigger para ese evento — el problema puede estar en GTM
 - Si GA4 reporta parámetro faltante (ej: transaction_id), busca si la variable DL existe
@@ -92,7 +94,7 @@ Cuando ese bloque esté presente:
   "requiere cambio en el sitio" — el gap necesita código del desarrollador
 - Incluye una sección "CONEXIONES GA4-GTM:" con cada conflicto o sinergia detectada
 
-Cuando ese bloque NO esté presente, diagnostica GTM de forma independiente.
+Si retorna available: false, diagnostica GTM de forma independiente.
 
 Problemas críticos comunes a detectar:
 - Tag de GA4 duplicado (más de una instancia del tag "gaawc" de configuración base)
@@ -165,6 +167,8 @@ Después de crear todos los elementos en el workspace:
 {COMMUNICATION_RULES}
 """,
     tools=[
+        get_ideal_spec_from_state,
+        get_ga4_findings_from_state,
         list_accounts,
         list_containers,
         get_container,

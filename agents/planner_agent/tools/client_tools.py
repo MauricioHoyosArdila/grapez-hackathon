@@ -142,6 +142,22 @@ def set_audit_mode(mode: str, tool_context: ToolContext) -> dict:
     }
 
 
+def save_ga4_findings(findings: str, tool_context: ToolContext) -> dict:
+    """
+    Guarda los hallazgos del GA4 Agent en session.state para que el GTM Agent
+    los use en el gap analysis cruzado. Llama inmediatamente después de que
+    ga4_tool devuelva su diagnóstico, antes de llamar gtm_tool.
+
+    Args:
+        findings: Respuesta completa del GA4 Agent con el diagnóstico de la propiedad
+    """
+    tool_context.state["ga4_findings"] = findings
+    return {
+        "saved": True,
+        "message": "Hallazgos GA4 guardados. GTM Agent los leerá via get_ga4_findings_from_state().",
+    }
+
+
 def save_ideal_spec(ideal_spec: dict, tool_context: ToolContext) -> dict:
     """
     Guarda el ideal_spec generado por web_analyzer_tool en el estado de sesión.

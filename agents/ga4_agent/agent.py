@@ -27,6 +27,7 @@ from agents.shared.prompts import (
     GA4_STANDARDS,
     IDEAL_SPEC_CONTEXT_SECTION,
 )
+from agents.shared.state_tools import get_ideal_spec_from_state
 
 root_agent = LlmAgent(
     model="gemini-2.5-flash",
@@ -103,6 +104,7 @@ Al implementar cambios:
 {COMMUNICATION_RULES}
 """,
     tools=[
+        get_ideal_spec_from_state,
         list_accounts,
         list_properties,
         get_property_details,

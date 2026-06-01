@@ -9,7 +9,19 @@ if _project_root not in sys.path:
 
 from google.adk.agents import LlmAgent
 from google.adk.tools.agent_tool import AgentTool
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams
+from mcp.client.stdio import StdioServerParameters as McpStdioParams
 from google.genai import types
+
+brave_search_toolset = MCPToolset(
+    connection_params=StdioConnectionParams(
+        server_params=McpStdioParams(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-brave-search"],
+            env={"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", "")},
+        )
+    )
+)
 
 from agents.ga4_agent.agent import root_agent as ga4_agent
 from agents.gtm_agent.agent import root_agent as gtm_agent
@@ -22,6 +34,7 @@ from .tools.client_tools import (
     set_business_context,
     set_audit_mode,
     save_ideal_spec,
+    save_ga4_findings,
 )
 
 ga4_tool = AgentTool(agent=ga4_agent)
@@ -75,18 +88,40 @@ Espera la respuesta. Llama set_audit_mode("auditoria" o "auditoria_implementacio
 
 ## PASO 2 — CONTEXTO DEL NEGOCIO
 
-Haz estas preguntas en UN SOLO mensaje (el consultor responde todo junto):
+Pide solo la URL:
 
-"Para calibrar el diagnóstico, necesito entender el negocio:
+"¿Cuál es la URL del sitio web del cliente?"
 
-1. **Tipo de negocio**: ¿Cómo lo describirías? (ecommerce, lead_generation, saas,
-   marketplace, media, u otro)
-2. **URL del sitio**: ¿Cuál es la URL principal del cliente?
-3. **Conversiones clave**: ¿Cuáles son las 2-3 acciones más importantes que quieres medir?
-   (ej: 'compra completada', 'formulario enviado', 'registro de cuenta')
-4. **Puntos de dolor** (opcional): ¿Hay algo que sabes que está roto o te preocupa?"
+Cuando tengas la URL, investiga automáticamente ANTES de hacer más preguntas:
+1. Llama brave_web_search: "[dominio] empresa qué vende servicios productos"
+2. Llama brave_web_search: "[dominio] [nombre empresa si lo detectaste]"
 
-Espera la respuesta. Llama set_business_context(business_type, website_url, key_conversions).
+Evalúa los resultados:
+
+**Si encontraste información útil** (descripción del negocio, sector, productos/servicios):
+Presenta al consultor lo que encontraste y pide confirmar en UN mensaje:
+
+"Investigué el sitio. Esto es lo que encontré:
+[2-3 líneas: qué hace el negocio, a quién le vende, en qué sector opera]
+
+Con base en esto asumo:
+- **Tipo de negocio**: [tipo detectado — ecommerce / lead_generation / saas / etc.]
+- **Conversiones más probables**: [lista deducida del research]
+
+¿Es correcto? ¿Cambiarías algo?
+¿Hay algún punto de dolor específico que deba saber antes de diagnosticar? (opcional)"
+
+**Si NO encontraste información útil** (resultados vacíos, sin relación con el dominio, o el sitio es muy nuevo):
+Pide la información al consultor directamente en UN mensaje:
+
+"No encontré información pública suficiente sobre este sitio. Para calibrar el diagnóstico necesito que me cuentes:
+
+1. **Tipo de negocio**: ¿Cómo lo describirías? (ecommerce, lead_generation, saas, marketplace, media, u otro)
+2. **Conversiones clave**: ¿Cuáles son las 2-3 acciones más importantes que quieres medir?
+   (ej: 'compra completada', 'formulario enviado', 'clic en WhatsApp')
+3. **Puntos de dolor** (opcional): ¿Hay algo que sabes que está roto o te preocupa?"
+
+Llama set_business_context() con los datos confirmados por el consultor.
 
 ## PASO 3 — SELECCIÓN DE SCOPE
 
@@ -124,32 +159,20 @@ NUNCA diagnostiques sin confirmar en qué propiedad y contenedor trabajar.
 1. Informa: "Iniciando diagnóstico completo comparando contra la configuración ideal para
    tu negocio..."
 
-2. Llama ga4_tool con este mensaje (construye con los valores reales del state):
+2. Llama ga4_tool con este mensaje (CORTO — no embeber ideal_spec aquí):
    "Diagnostica la propiedad GA4 [property_id] de la cuenta [ga4_account_id].
    Tipo de negocio: [business_type].
+   Llama get_ideal_spec_from_state() para obtener el ideal_spec del cliente y hacer el gap analysis.
+   [Si hubo respuestas del consultor a ambigüedades en Paso 4: inclúyelas aquí en 1-2 líneas]"
 
-   === IDEAL SPEC ===
-   [JSON completo del ideal_spec guardado en session.state]
+3. Cuando GA4 responda: llama save_ga4_findings() con la respuesta completa de ga4_tool.
 
-   Respuestas del consultor a ambigüedades: [incluir si las hubo en Paso 4]
-
-   Haz el gap analysis completo: actual vs ideal_spec. Por cada gap, indica si la solución
-   es desde GA4 Admin, desde GTM, o desde el código del sitio."
-
-3. Cuando GA4 responda, llama gtm_tool con este mensaje:
+4. Llama gtm_tool con este mensaje (CORTO — no embeber ideal_spec ni hallazgos GA4 aquí):
    "Diagnostica el contenedor GTM [container_id] de la cuenta [gtm_account_id].
    Tipo de negocio: [business_type].
-
-   === IDEAL SPEC ===
-   [JSON completo del ideal_spec guardado en session.state]
-
-   === HALLAZGOS GA4 ===
-   [Respuesta completa de ga4_tool del paso anterior]
-
-   Respuestas del consultor a ambigüedades: [incluir si las hubo en Paso 4]
-
-   Haz el gap analysis de GTM vs ideal_spec. Conecta con hallazgos de GA4: identifica
-   qué gaps de GA4 tienen solución en GTM y cuáles requieren cambio en el sitio."
+   Llama get_ideal_spec_from_state() para el ideal_spec y get_ga4_findings_from_state() para
+   los hallazgos de GA4. Haz gap analysis cruzado: conecta qué gaps de GA4 tienen solución
+   en GTM y cuáles requieren cambio en el sitio."
 
 ## PASO 6 — PREGUNTAS ADICIONALES (solo si los agentes las señalan)
 
@@ -211,9 +234,11 @@ Adapta la tabla A2UI al alcance real.
         set_business_context,
         set_audit_mode,
         save_ideal_spec,
+        save_ga4_findings,
         confirm_action,
         ga4_tool,
         gtm_tool,
         web_analyzer_tool,
+        brave_search_toolset,
     ],
 )

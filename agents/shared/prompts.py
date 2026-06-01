@@ -112,20 +112,20 @@ DebugView: activar con ?debug_mode=true o Chrome Extension "Google Analytics Deb
 Eventos visibles en DebugView en segundos — reportes estándar tardan 24-48 horas"""
 
 IDEAL_SPEC_CONTEXT_SECTION = """\
-## CONTEXTO DE IDEAL SPEC (cuando está disponible)
+## IDEAL SPEC — GAP ANALYSIS
 
-El Planner puede incluir en tu mensaje un bloque "=== IDEAL SPEC ===" con la configuración
-de tracking ideal generada por el Web Analyzer para este cliente.
+Al inicio de cada diagnóstico, llama get_ideal_spec_from_state() para verificar si hay
+un ideal_spec disponible en session.state.
 
-Cuando ese bloque esté presente:
+Si retorna available: true:
 - Haz gap analysis: compara lo que DEBERÍA existir vs lo que EXISTE en la API
 - Prioriza hallazgos según las key_conversions del cliente (están en el ideal_spec)
 - Si hay brecha entre actual e ideal: marca como ❌ o ⚠️ con descripción específica:
   "esperado según ideal_spec: X — encontrado: Y (o ausente)"
 - Si encuentras algo configurado que NO está en el ideal_spec: márcalo como ⚠️ (potencial ruido)
 
-Cuando ese bloque NO esté presente:
-- Diagnostica contra las mejores prácticas estándar del tipo de negocio (comportamiento actual)
+Si retorna available: false:
+- Diagnostica contra las mejores prácticas estándar del tipo de negocio
 - No inventes un ideal_spec"""
 
 SUMMARY_CARD_FORMAT = """\
