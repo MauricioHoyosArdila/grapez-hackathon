@@ -6,9 +6,9 @@
 
 ## Estado Actual
 
-**Fase**: 3 — Construcción activa. Semana 4 en curso (May 24-30).
-**Última sesión**: 27 de mayo 2026 (Sesión 6)
-**Próximo paso**: Probar `adk web agents/planner_agent` con cuenta real de Grapez Studio — flujo completo scope selection → diagnóstico GA4 + GTM
+**Fase**: 3 — Construcción activa. Semana 5 en curso (Jun 1-4).
+**Última sesión**: 1 de junio 2026 (Sesión 8)
+**Próximo paso**: Probar flujo completo con fix MALFORMED_FUNCTION_CALL + Juan Camilo agrega BRAVE_API_KEY y hace PR de `dev/juanca/ga4-agent`
 
 ---
 
@@ -79,8 +79,9 @@
 | OAuth tokens storage (demo) | iron-session cookie cifrada | Elimina ~4 días de dev; jueces ven OAuth real |
 | OAuth tokens storage (prod) | Firestore + Fernet encryption | Documentado en sección 8, post-hackathon |
 | OAuth en agentes | `ToolContext.state` | Propagación automática a sub-agentes, patrón oficial ADK |
-| MCP integration | analytics-tracking skill (MCP Market) | Obligatorio Track 1; enriquece contexto GA4/GTM |
-| APIs Google (writes) | Llamadas directas via Python libs | MCPs disponibles son solo lectura; necesitamos writes |
+| MCP integration | Brave Search MCP (`@modelcontextprotocol/server-brave-search`) | Track 1 satisfecho; investiga dominio del cliente antes del diagnóstico |
+| APIs Google (reads + writes) | Llamadas directas via Python libs | MCP oficial GA4 es solo lectura; necesitamos writes; patrón directo más estable |
+| Contexto compartido sub-agentes | Patrón pull desde `session.state` | Evita MALFORMED_FUNCTION_CALL al embeber JSONs grandes en parámetros de AgentTool |
 | Web crawling | Playwright en Docker (Cloud Run) | Agent Engine no tiene Chromium; Cloud Run sí |
 | UI dinámica | A2UI renderer custom React/Tailwind | No hay npm `@google/a2ui` para React; renderer custom ~200 líneas |
 | Deploy Web Analyzer | Cloud Run 2Gi Docker | Chromium requiere mínimo 1GB RAM; Cloud Run escala a cero |
@@ -111,6 +112,58 @@
 - Resuelto: Modelo gemini-3-flash-preview confirmado válido
 - Resuelto: Deploy — orden y comandos verificados
 - Todas las deudas técnicas eliminadas — arquitectura lista para construir
+
+### Sesión 8 — 1 de junio 2026
+
+- **Limpieza rama `dev/juanca/ga4-agent`**:
+  - Creado backup `backup/juanca-ga4-agent-pre-rebase`
+  - Rebase limpio sobre master: eliminados 2 commits vacíos + 4 commits duplicados
+  - Rama quedó con 2 commits de trabajo real encima de master — force push ejecutado
+
+- **Fix crítico MALFORMED_FUNCTION_CALL**:
+  - Causa: Planner embebía ideal_spec JSON completo + respuesta GA4 (~15K chars) en el parámetro `request` del AgentTool call a gtm_tool
+  - Solución — patrón pull de session.state:
+    - `agents/shared/state_tools.py` (nuevo): `get_ideal_spec_from_state()` y `get_ga4_findings_from_state()`
+    - `save_ga4_findings()` agregado a `client_tools.py`
+    - Planner: Paso 5 reescrito — mensajes a sub-agentes ahora son 3-4 líneas
+    - GA4 Agent: agrega `get_ideal_spec_from_state` a su tools list
+    - GTM Agent: agrega ambas tools de estado + instrucción actualizada
+    - `shared/prompts.py`: `IDEAL_SPEC_CONTEXT_SECTION` actualizado para usar tools en vez de bloque embebido
+  - Dependencia nueva: `mcp>=1.27.2` agregada a `requirements.txt`
+
+- **Integración Brave Search MCP** (satisface Track 1):
+  - `MCPToolset` con `@modelcontextprotocol/server-brave-search` agregado al Planner
+  - Paso 2 rediseñado: investiga dominio automáticamente → presenta hallazgos para confirmar
+  - Fallback si Brave no encuentra info: solicita datos al consultor manualmente
+  - `BRAVE_API_KEY` agregada a `.env.example` (key gratuita — 2,000 req/mes)
+  - Decisión: mantener APIs directas para GA4/GTM — MCP oficial GA4 es solo lectura
+
+- **Pendiente Juan Camilo**: agregar `BRAVE_API_KEY` al `.env` local
+
+### Sesión 7 — 29 de mayo 2026
+
+- **Web Analyzer Agent construido** (`agents/web_analyzer_agent/agent.py`):
+  - Estructura dual: `current_state` (qué hay) + `ideal_spec` (qué debería haber)
+  - Respuesta JSON estructurada con `ambiguities` para preguntas al consultor
+  - Maneja caso sin Playwright: infiere del contexto del negocio con marcador "[INFERIDO]"
+  - `agents/web_analyzer_agent/tools/` creado (vacío — Playwright tools pendientes Semana 4)
+
+- **Módulo compartido de prompts** (`agents/shared/prompts.py`):
+  - `GA4_STANDARDS` — límites técnicos, naming de eventos, P0 por tipo de negocio, checklist pre-lanzamiento
+  - `GTM_STANDARDS` — nomenclatura obligatoria, restricciones JS (ES5 solo), reglas dataLayer, workflow deploy
+  - `IDEAL_SPEC_CONTEXT_SECTION` — instrucción para GA4/GTM de usar el ideal_spec del Web Analyzer en gap analysis
+  - `A2UI_FORMAT_EXAMPLES`, `SUMMARY_CARD_FORMAT`, `FINDING_CLASSIFICATION`, `COMMUNICATION_RULES`
+
+- **Planner Agent actualizado**:
+  - Integra `web_analyzer_tool` como AgentTool (junto a ga4_tool, gtm_tool)
+  - Dos nuevas tools: `set_audit_mode` (auditoria | auditoria_implementacion) y `save_ideal_spec`
+  - Flujo: Web Analyzer genera ideal_spec → Planner lo guarda en state → GA4/GTM lo usan para gap analysis
+
+- **client_tools.py actualizado**:
+  - `set_audit_mode()` — registra modo de trabajo elegido al inicio
+  - `save_ideal_spec()` — propaga ideal_spec del Web Analyzer a GA4/GTM via session.state
+
+- **Cambios sin commitear**: 5 archivos modificados + `agents/shared/` + `agents/web_analyzer_agent/__init__.py` + `agents/web_analyzer_agent/tools/`
 
 ### Sesión 6 — 27 de mayo 2026
 

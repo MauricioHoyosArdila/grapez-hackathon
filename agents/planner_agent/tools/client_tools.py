@@ -58,16 +58,25 @@ def confirm_action(action_description: str, tool_context: ToolContext) -> dict:
     }
 
 
-def set_business_context(business_type: str, tool_context: ToolContext) -> dict:
+def set_business_context(
+    business_type: str,
+    website_url: str,
+    key_conversions: list | str,
+    tool_context: ToolContext,
+) -> dict:
     """
-    Guarda el contexto del tipo de negocio del cliente en la sesión.
-    Úsala al inicio del diagnóstico para que los agentes prioricen los hallazgos
-    correctos según el modelo de negocio.
+    Guarda el contexto del negocio del cliente en la sesión.
+    Llama después de recopilar los datos del consultor en el Paso 2.
+    Todos los agentes usarán estos datos para adaptar su análisis.
 
     Args:
-        business_type: Tipo de negocio del cliente.
-                       Valores válidos: "ecommerce", "lead_generation", "saas",
-                       "marketplace", "media", "otro"
+        business_type: Tipo de negocio. Valores válidos: "ecommerce", "lead_generation",
+                       "saas", "marketplace", "media", "otro"
+        website_url:   URL del sitio web del cliente (ej: "https://mitienda.com").
+                       Requerida para que el Web Analyzer pueda crawlear el sitio.
+        key_conversions: Lista de 2-3 acciones clave que el consultor quiere trackear
+                 (ej: ["compra completada", "registro de usuario"]).
+                 Si llega como string (ej: desde un LLM), se normaliza a list[str].
     """
     valid_types = {"ecommerce", "lead_generation", "saas", "marketplace", "media", "otro"}
     if business_type.lower() not in valid_types:
@@ -75,8 +84,90 @@ def set_business_context(business_type: str, tool_context: ToolContext) -> dict:
             "error": f"Tipo de negocio inválido: '{business_type}'.",
             "valid_options": sorted(valid_types),
         }
+    if not website_url or not website_url.startswith("http"):
+        return {
+            "error": "website_url inválida. Debe comenzar con 'http://' o 'https://'.",
+        }
+    # Normaliza key_conversions a list[str] y valida su estructura.
+    if isinstance(key_conversions, str):
+        normalized_conversions = [item.strip() for item in key_conversions.split(",") if item.strip()]
+    elif isinstance(key_conversions, list):
+        normalized_conversions = []
+        for item in key_conversions:
+            if not isinstance(item, str):
+                return {
+                    "error": "key_conversions debe contener solo strings.",
+                }
+            cleaned = item.strip()
+            if cleaned:
+                normalized_conversions.append(cleaned)
+    else:
+        return {
+            "error": "key_conversions inválido. Debe ser list[str] o string separado por comas.",
+        }
+
+    if not normalized_conversions:
+        return {
+            "error": "key_conversions no puede estar vacío. Pide al consultor al menos 1 conversión clave.",
+        }
     tool_context.state["business_type"] = business_type.lower()
+    tool_context.state["website_url"] = website_url
+    tool_context.state["key_conversions"] = normalized_conversions
     return {
         "business_type": business_type.lower(),
-        "message": f"Contexto guardado: cliente de tipo '{business_type}'. Los agentes priorizarán los hallazgos relevantes para este modelo de negocio.",
+        "website_url": website_url,
+        "key_conversions": normalized_conversions,
+        "message": "Contexto del negocio guardado. URL lista para Web Analyzer.",
+    }
+
+
+def set_audit_mode(mode: str, tool_context: ToolContext) -> dict:
+    """
+    Registra el modo de trabajo elegido por el consultor al inicio de la sesión.
+
+    Args:
+        mode: "auditoria" (solo diagnóstico, sin cambios) o
+              "auditoria_implementacion" (diagnóstico + aplicar cambios confirmados)
+    """
+    valid_modes = {"auditoria", "auditoria_implementacion"}
+    if mode.lower() not in valid_modes:
+        return {
+            "error": f"Modo inválido: '{mode}'. Opciones: 'auditoria' o 'auditoria_implementacion'.",
+        }
+    tool_context.state["audit_mode"] = mode.lower()
+    label = "Solo auditoría" if mode.lower() == "auditoria" else "Auditoría + implementación"
+    return {
+        "audit_mode": mode.lower(),
+        "message": f"Modo '{label}' activado.",
+    }
+
+
+def save_ga4_findings(findings: str, tool_context: ToolContext) -> dict:
+    """
+    Guarda los hallazgos del GA4 Agent en session.state para que el GTM Agent
+    los use en el gap analysis cruzado. Llama inmediatamente después de que
+    ga4_tool devuelva su diagnóstico, antes de llamar gtm_tool.
+
+    Args:
+        findings: Respuesta completa del GA4 Agent con el diagnóstico de la propiedad
+    """
+    tool_context.state["ga4_findings"] = findings
+    return {
+        "saved": True,
+        "message": "Hallazgos GA4 guardados. GTM Agent los leerá via get_ga4_findings_from_state().",
+    }
+
+
+def save_ideal_spec(ideal_spec: dict, tool_context: ToolContext) -> dict:
+    """
+    Guarda el ideal_spec generado por web_analyzer_tool en el estado de sesión.
+    Los agentes GA4 y GTM lo usarán como referencia para el gap analysis.
+
+    Args:
+        ideal_spec: Campo "ideal_spec" del JSON devuelto por web_analyzer_tool
+    """
+    tool_context.state["ideal_spec"] = ideal_spec
+    return {
+        "saved": True,
+        "message": "Ideal spec guardado en sesión. GA4 y GTM lo usarán para el gap analysis.",
     }
