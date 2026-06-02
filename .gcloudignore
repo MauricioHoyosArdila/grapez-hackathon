@@ -1,0 +1,35 @@
+.git
+.gcloudignore
+.gitignore
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Credenciales locales — no subir al deploy
+.env
+service-account.json
+*.json.bak
+
+# Frontend — no forma parte del agent deploy
+frontend/
+frontend/node_modules/
+frontend/.next/
+
+# Playwright browser binaries
+playwright_service/
+
+# ADK artifacts
+.adk/
+adk_session_storage/
+
+# Docs y demo scripts — no necesarios en el agente
+docs/
+demo/
+scripts/
+architecture/
+skills/

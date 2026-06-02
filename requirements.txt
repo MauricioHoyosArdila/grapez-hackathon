@@ -1,6 +1,5 @@
 # Grapez Analytics Agents — Python Dependencies
 # Instalar con: pip install -r requirements.txt
-# Después: playwright install chromium
 
 # ─── Google ADK ────────────────────────────────────────────
 google-adk==2.1.0
@@ -13,15 +12,11 @@ google-auth>=2.29.0
 google-auth-oauthlib>=1.2.0
 google-auth-httplib2>=0.2.0
 google-api-python-client>=2.126.0
-google-ads>=24.0.0
 
 # ─── Google Cloud ──────────────────────────────────────────
+google-cloud-aiplatform>=1.87.0
 google-cloud-firestore>=2.16.0
 google-cloud-secret-manager>=2.20.0
-
-# ─── Web Analyzer ──────────────────────────────────────────
-playwright>=1.44.0
-beautifulsoup4>=4.12.0
 
 # ─── Encriptación ──────────────────────────────────────────
 cryptography>=42.0.0

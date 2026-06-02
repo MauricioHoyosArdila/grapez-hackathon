@@ -9,24 +9,13 @@ if _project_root not in sys.path:
 
 from google.adk.agents import LlmAgent
 from google.adk.tools.agent_tool import AgentTool
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams
-from mcp.client.stdio import StdioServerParameters as McpStdioParams
 from google.genai import types
-
-brave_search_toolset = MCPToolset(
-    connection_params=StdioConnectionParams(
-        server_params=McpStdioParams(
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-brave-search"],
-            env={"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", "")},
-        )
-    )
-)
 
 from agents.ga4_agent.agent import root_agent as ga4_agent
 from agents.gtm_agent.agent import root_agent as gtm_agent
 from agents.web_analyzer_agent.agent import root_agent as web_analyzer_agent
 from agents.shared.prompts import A2UI_FORMAT_EXAMPLES, COMMUNICATION_RULES, SUMMARY_CARD_FORMAT
+from .tools.brave_search import brave_web_search
 from .tools.client_tools import (
     load_client_tokens,
     get_session_info,
@@ -257,6 +246,6 @@ Adapta la tabla A2UI al alcance real.
         ga4_tool,
         gtm_tool,
         web_analyzer_tool,
-        brave_search_toolset,
+        brave_web_search,
     ],
 )
