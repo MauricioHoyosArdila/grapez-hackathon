@@ -18,12 +18,12 @@ export default async function HomePage() {
           {session.isLoggedIn ? (
             <div className="flex items-center gap-3">
               <span className="text-sm text-zinc-500">{session.userEmail}</span>
-              <Link
-                href="/api/oauth/google/status"
+              <a
+                href="/api/oauth/google/logout"
                 className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
               >
                 Cerrar sesión
-              </Link>
+              </a>
             </div>
           ) : (
             <Link
@@ -36,40 +36,60 @@ export default async function HomePage() {
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-6">
-          Clientes
-        </h1>
-        <div className="grid gap-3">
-          {mockClients.map((client) => (
-            <Link
-              key={client.id}
-              href={`/clients/${client.id}/chat`}
-              className="block bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-5 py-4 hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="font-medium text-zinc-900 dark:text-zinc-100">
-                      {client.name}
-                    </h2>
-                    <StatusBadge status={client.status} />
+      {session.isLoggedIn ? (
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-6">
+            Clientes
+          </h1>
+          <div className="grid gap-3">
+            {mockClients.map((client) => (
+              <Link
+                key={client.id}
+                href={`/clients/${client.id}/chat`}
+                className="block bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-5 py-4 hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {client.name}
+                      </h2>
+                      <StatusBadge status={client.status} />
+                    </div>
+                    <p className="text-sm text-zinc-500 mt-0.5">{client.websiteUrl}</p>
                   </div>
-                  <p className="text-sm text-zinc-500 mt-0.5">{client.websiteUrl}</p>
+                  <div className="text-right">
+                    <p className="text-xs text-zinc-400">{client.industry}</p>
+                    {client.lastDiagnosed && (
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Diagnóstico: {client.lastDiagnosed}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-zinc-400">{client.industry}</p>
-                  {client.lastDiagnosed && (
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      Diagnóstico: {client.lastDiagnosed}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="max-w-4xl mx-auto px-6 py-24 flex flex-col items-center text-center gap-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+              Ecosistema de Medición
+            </h1>
+            <p className="text-zinc-500 text-sm max-w-md">
+              Conecta tu cuenta de Google para diagnosticar y configurar GA4, GTM y el sitio
+              web de tus clientes con ayuda de agentes de IA.
+            </p>
+          </div>
+          <Link
+            href="/api/oauth/google/start"
+            className="px-6 py-2.5 bg-zinc-900 text-white text-sm font-medium rounded-lg hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors"
+          >
+            Conectar cuenta Google
+          </Link>
+        </div>
+      )}
     </main>
   )
 }

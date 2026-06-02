@@ -19,18 +19,16 @@ export function ChatClient({ client, initialMessages = [] }: ChatClientProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  async function sendMessage(e: React.FormEvent) {
-    e.preventDefault()
-    if (!input.trim() || loading) return
+  async function submitMessage(text: string) {
+    if (!text.trim() || loading) return
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: text.trim(),
       timestamp: new Date(),
     }
     setMessages((prev) => [...prev, userMsg])
-    setInput("")
     setLoading(true)
 
     // Placeholder del asistente mientras espera respuesta
@@ -44,7 +42,7 @@ export function ChatClient({ client, initialMessages = [] }: ChatClientProps) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg.content, clientId: client.id }),
+        body: JSON.stringify({ message: text.trim(), clientId: client.id }),
       })
 
       if (!res.ok) throw new Error("Error del servidor")
@@ -59,10 +57,10 @@ export function ChatClient({ client, initialMessages = [] }: ChatClientProps) {
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
 
-        // SSE: cada línea es "data: <texto>"
+        // SSE: cada línea es "data: <texto>", |NL| codifica newlines reales
         for (const line of chunk.split("\n")) {
           if (line.startsWith("data: ")) {
-            fullText += line.slice(6)
+            fullText += line.slice(6).replace(/\|NL\|/g, "\n")
             const parsed = parseA2UI(fullText)
             setMessages((prev) =>
               prev.map((m) =>
@@ -74,7 +72,7 @@ export function ChatClient({ client, initialMessages = [] }: ChatClientProps) {
           }
         }
       }
-    } catch (err) {
+    } catch {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -87,15 +85,19 @@ export function ChatClient({ client, initialMessages = [] }: ChatClientProps) {
     }
   }
 
+  async function sendMessage(e: React.FormEvent) {
+    e.preventDefault()
+    const text = input
+    setInput("")
+    await submitMessage(text)
+  }
+
   function handleConfirm(actionId: string) {
-    sendMessage({
-      preventDefault: () => {},
-    } as React.FormEvent)
-    setInput(`CONFIRMAR:${actionId}`)
+    submitMessage(`Confirmo: ${actionId}`)
   }
 
   function handleCancel(actionId: string) {
-    setInput(`CANCELAR:${actionId}`)
+    submitMessage(`Cancelo: ${actionId}`)
   }
 
   return (
@@ -123,7 +125,7 @@ export function ChatClient({ client, initialMessages = [] }: ChatClientProps) {
               ) : (
                 <div className="space-y-3">
                   {msg.content && (
-                    <div className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                    <div className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed whitespace-pre-wrap">
                       {msg.content}
                       {loading && msg.content === "" && (
                         <span className="inline-block w-2 h-4 bg-zinc-400 animate-pulse ml-1" />
