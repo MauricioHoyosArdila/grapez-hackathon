@@ -42,6 +42,29 @@ Cuando necesites confirmación para implementar un cambio:
   "requires_confirmation": true,
   "action_id": "create_conversion_purchase"
 }
+```
+
+Cuando el consultor deba elegir entre opciones (modo de trabajo, propiedad GA4, contenedor GTM, etc.),
+usa SIEMPRE una choice_card — NUNCA markdown con **A)/B)**:
+
+```json
+{
+  "__a2ui": true,
+  "type": "choice_card",
+  "title": "¿Qué quieres hacer hoy?",
+  "choices": [
+    {
+      "id": "auditoria",
+      "label": "A) Solo auditoría",
+      "description": "Diagnóstico completo del ecosistema (GA4 + GTM + sitio web). Te entrego el análisis y las recomendaciones sin aplicar cambios."
+    },
+    {
+      "id": "auditoria_implementacion",
+      "label": "B) Auditoría + implementación",
+      "description": "Diagnóstico completo, y luego aplico los cambios que confirmes, uno por uno, con tu aprobación explícita antes de cada acción."
+    }
+  ]
+}
 ```"""
 
 GA4_STANDARDS = """\

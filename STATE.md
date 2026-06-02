@@ -97,6 +97,102 @@
 
 ## Log de Sesiones
 
+### Sesión 9 — 2 de junio 2026
+
+**Frontend — experiencia completa de demo + live session**
+
+- **Fix iron-session callback**: La cookie no se guardaba al hacer OAuth porque `session.save()` usaba la API `cookies()` de Next.js pero `NextResponse.redirect()` crea un objeto de respuesta independiente que no hereda las cookies. Fix: pasar `req` + `response` directamente a `getIronSession`. Mismo fix aplicado al logout.
+
+- **Home page rediseñada** (`frontend/app/page.tsx`):
+  - CTA "Diagnosticar nuevo ecosistema" → `/clients/new`
+  - Sección "Mis análisis" — clientes creados en la sesión (con "Continuar" + "Reiniciar")
+  - Sección "Demos" — 3 clientes mock bloqueados con tag "Demo"
+
+- **Formulario de nuevo cliente** (`frontend/app/clients/new/`):
+  - Server Component shell + Client Component form (`NewClientForm.tsx`)
+  - Campos: nombre empresa, sitio web (https:// auto-agregado), modelo de negocio (10 opciones)
+  - Submite a `POST /api/clients` → guarda en iron-session → redirige al chat
+
+- **Almacenamiento de clientes creados — iron-session (DEMO)**:
+  - `frontend/lib/session.ts`: agregado `StoredClient` interface + `createdClients?: StoredClient[]` a `SessionData`
+  - `maxAge` aumentado de 1h a 24h para que los clientes persistan durante el día de demo
+  - `POST /api/clients`: crea cliente y guarda en cookie
+  - `DELETE /api/clients?id=`: elimina cliente de la sesión
+  - **LÍMITE**: cookie cifrada ≤ ~3KB útil — soporta ~10-15 clientes antes de empezar a fallar
+  - **Para producción** → migrar a Firestore (ver sección abajo)
+
+- **Demo clients con conversaciones falsas** (`frontend/lib/mock-clients.ts`):
+  - 3 demos con conversaciones completas hardcodeadas (choice_card, table, action_card, progress, summary_card)
+  - Demo 1: Tienda Demo — ciclo completo auditoría + implementación
+  - Demo 2: Retail Colombia — auditoría GTM, bug de camelCase detectado
+  - Demo 3: E-commerce Test — pending de confirmación
+  - `Client` type actualizado con `isDemo?: boolean` + `demoConversation?: ChatMessage[]`
+
+- **Chat en modo demo** (`frontend/app/clients/[id]/chat/`):
+  - `ChatClient.tsx`: prop `readOnly` — bloquea `submitMessage`, oculta input, oculta botón "Reiniciar sesión"
+  - Footer demo: solo muestra icono de candado + "Conversación de ejemplo — solo lectura"
+  - `chat/page.tsx`: resuelve clientes en mockClients primero, luego en `session.createdClients`
+  - `chat/page.tsx`: `?reset=true` → borra sesión ADK antes de cargar (`DELETE /apps/{APP_NAME}/users/{userId}/sessions/{sessionId}`)
+
+- **Reset de sesión ADK** (`frontend/app/api/session/[clientId]/route.ts`):
+  - `DELETE /api/session/{clientId}` — llama al ADK dev server para borrar la sesión
+
+---
+
+### ⚠️ PENDIENTE MAURO — Migración Firestore para clientes creados
+
+Actualmente los clientes creados por el consultor se guardan en la **cookie de sesión iron-session**. Esto funciona para el demo pero tiene límites:
+
+| Limitación | Detalle |
+|---|---|
+| Tamaño | Cookie cifrada ≤ ~4KB total — ~10-15 clientes máx antes de overflow silencioso |
+| Persistencia | Se borran al cerrar sesión (logout) o expirar la cookie (24h) |
+| Multi-dispositivo | No sincroniza entre dispositivos |
+| Producción | Inaceptable para uso real |
+
+**Migración a Firestore** (cuando haya tiempo post-hackathon o antes del deploy):
+
+```
+Firestore schema:
+consultants/
+  {userId}/              ← derived from session.userEmail (slugified)
+    clients/
+      {clientId}/        ← el id generado en slugify()
+        name: string
+        websiteUrl: string
+        industry: string
+        createdAt: timestamp
+        lastChatAt: timestamp (opcional)
+```
+
+**Archivos a modificar para la migración**:
+
+1. `frontend/app/api/clients/route.ts`
+   - POST: cambiar `session.createdClients.push()` → `db.collection('consultants').doc(userId).collection('clients').doc(id).set(...)`
+   - DELETE: cambiar filtro de session → `db.doc(...).delete()`
+
+2. `frontend/app/page.tsx`
+   - Cambiar `session.createdClients ?? []` → query Firestore `consultants/{userId}/clients`
+
+3. `frontend/app/clients/[id]/chat/page.tsx`
+   - Cambiar `session.createdClients?.find(...)` → `db.doc('consultants/{userId}/clients/{id}').get()`
+
+4. `frontend/lib/session.ts`
+   - Eliminar `createdClients` de `SessionData` (ya no se guarda en cookie)
+   - Eliminar `StoredClient` interface (reemplazar con el tipo de Firestore)
+
+**Dependencias necesarias** (ya en `requirements.txt` el server, pero para el frontend):
+```bash
+# En /frontend
+npm install firebase  # o usar google-cloud-firestore via API route
+```
+
+El modelo de autenticación para Firestore desde el frontend en producción:
+- Las API routes (`/api/clients`) usan el Service Account desde `GOOGLE_APPLICATION_CREDENTIALS`
+- El `userId` se deriva de `session.userEmail` (slugificado como hace el chat route)
+
+---
+
 ### Sesión 1 — 2 de mayo 2026
 - Proyecto inicializado
 - CLAUDE.md escrito con arquitectura completa

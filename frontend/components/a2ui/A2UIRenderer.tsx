@@ -5,14 +5,16 @@ import { DiagnosisTable } from "./DiagnosisTable"
 import { ActionCard } from "./ActionCard"
 import { ProgressBar } from "./ProgressBar"
 import { SummaryCard } from "./SummaryCard"
+import { ChoiceCard } from "./ChoiceCard"
 
 interface A2UIRendererProps {
   component: A2UIComponent
   onConfirm?: (actionId: string) => void
   onCancel?: (actionId: string) => void
+  onChoice?: (label: string) => void
 }
 
-export function A2UIRenderer({ component, onConfirm, onCancel }: A2UIRendererProps) {
+export function A2UIRenderer({ component, onConfirm, onCancel, onChoice }: A2UIRendererProps) {
   switch (component.type) {
     case "table":
       return <DiagnosisTable data={component} />
@@ -22,6 +24,8 @@ export function A2UIRenderer({ component, onConfirm, onCancel }: A2UIRendererPro
       return <ProgressBar data={component} />
     case "summary_card":
       return <SummaryCard data={component} />
+    case "choice_card":
+      return <ChoiceCard data={component} onChoice={onChoice} />
   }
 }
 
