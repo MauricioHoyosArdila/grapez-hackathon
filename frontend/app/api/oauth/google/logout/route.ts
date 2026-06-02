@@ -1,11 +1,10 @@
+import { NextRequest, NextResponse } from "next/server"
 import { getIronSession } from "iron-session"
 import { SessionData, sessionOptions } from "@/lib/session"
-import { cookies } from "next/headers"
-import { NextResponse } from "next/server"
 
-export async function GET() {
-  const cookieStore = await cookies()
-  const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
+export async function GET(req: NextRequest) {
+  const response = NextResponse.redirect(new URL("/", process.env.NEXT_PUBLIC_APP_URL!))
+  const session = await getIronSession<SessionData>(req, response, sessionOptions)
   session.destroy()
-  return NextResponse.redirect(new URL("/", process.env.NEXT_PUBLIC_APP_URL!))
+  return response
 }

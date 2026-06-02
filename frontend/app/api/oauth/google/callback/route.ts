@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getIronSession } from "iron-session"
 import { SessionData, sessionOptions } from "@/lib/session"
-import { cookies } from "next/headers"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -41,14 +40,14 @@ export async function GET(req: NextRequest) {
   })
   const user = await userRes.json()
 
-  // Guardar en iron-session
-  const cookieStore = await cookies()
-  const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
+  // Guardar en iron-session — pasar req + response para que el cookie quede en el redirect
+  const response = NextResponse.redirect(new URL("/", req.url))
+  const session = await getIronSession<SessionData>(req, response, sessionOptions)
   session.isLoggedIn = true
   session.accessToken = tokens.access_token
   session.refreshToken = tokens.refresh_token
   session.userEmail = user.email
   await session.save()
 
-  return NextResponse.redirect(new URL("/", req.url))
+  return response
 }

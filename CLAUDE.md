@@ -1183,7 +1183,7 @@ gcloud run deploy grapez-hackathon-frontend \
 
 ## 15. Estructura de Archivos del Proyecto
 
-> Estado real al 1 junio 2026. ✅ = existe | ❌ = pendiente de crear
+> Estado real al 2 junio 2026. ✅ = existe | ❌ = pendiente de crear
 
 ```
 grapez-hackathon/
@@ -1244,20 +1244,27 @@ grapez-hackathon/
 ├── frontend/              ✅ Next.js 15 App Router — construido, no deployado
 │   ├── app/
 │   │   ├── layout.tsx            ✅
-│   │   ├── page.tsx              ✅ lista de clientes (mock)
+│   │   ├── page.tsx              ✅ home: Nuevo análisis CTA + Mis análisis + Demos
 │   │   ├── globals.css           ✅
-│   │   ├── clients/[id]/chat/
-│   │   │   ├── page.tsx          ✅
-│   │   │   └── ChatClient.tsx    ✅ Chat UI con A2UIRenderer
+│   │   ├── clients/
+│   │   │   ├── new/
+│   │   │   │   ├── page.tsx          ✅ Server Component — formulario nuevo cliente
+│   │   │   │   └── NewClientForm.tsx ✅ Client Component — nombre, URL, industria
+│   │   │   └── [id]/chat/
+│   │   │       ├── page.tsx          ✅ resuelve mock ∪ session.createdClients → demo|live
+│   │   │       └── ChatClient.tsx    ✅ Chat UI + A2UIRenderer + readOnly mode para demos
 │   │   ├── dev/tokens/
 │   │   │   ├── page.tsx          ✅ genera/copia tokens para testing
 │   │   │   └── CopyButton.tsx    ✅
 │   │   └── api/
-│   │       ├── chat/route.ts     ✅ (❌ Agent Runtime ID no configurado aún)
+│   │       ├── chat/route.ts         ✅ (❌ Agent Runtime ID no configurado aún)
+│   │       ├── clients/route.ts      ✅ POST crea cliente en session; DELETE elimina
+│   │       ├── session/[clientId]/
+│   │       │   └── route.ts          ✅ DELETE resetea sesión ADK del cliente
 │   │       └── oauth/google/
 │   │           ├── start/route.ts    ✅
-│   │           ├── callback/route.ts ✅
-│   │           └── status/route.ts   ✅
+│   │           ├── callback/route.ts ✅ iron-session fix: req+response pattern
+│   │           └── logout/route.ts   ✅ iron-session fix: req+response pattern
 │   ├── components/a2ui/
 │   │   ├── A2UIRenderer.tsx   ✅ dispatcher por type
 │   │   ├── DiagnosisTable.tsx ✅ type: "table"
@@ -1265,9 +1272,10 @@ grapez-hackathon/
 │   │   ├── ProgressBar.tsx    ✅ type: "progress"
 │   │   └── SummaryCard.tsx    ✅ type: "summary_card"
 │   ├── lib/
-│   │   ├── mock-clients.ts    ✅ 3-4 clientes ficticios para el demo
-│   │   ├── session.ts         ✅ iron-session config
-│   │   └── types.ts           ✅
+│   │   ├── mock-clients.ts    ✅ 3 demos con conversaciones completas A2UI + 1 live
+│   │   ├── session.ts         ✅ iron-session: SessionData + StoredClient[] + 24h TTL
+│   │   ├── types.ts           ✅ Client (isDemo, demoConversation), ChatMessage
+│   │   └── parse-a2ui.ts      ✅ extrae bloques JSON A2UI del texto del agente
 │   ├── package.json           ✅
 │   └── next.config.ts         ✅
 │
@@ -1895,6 +1903,58 @@ root_agent = LlmAgent(
 ```
 
 Con Vertex AI + billing habilitado los 429 son raros. Este retry es la red de seguridad para picos ocasionales. Si los 429 persisten, solicitar aumento de quota en GCP Console → APIs & Services → Quotas.
+
+---
+
+### 19.13 Client Storage — iron-session cookie para demo → Firestore post-hackathon (junio 2, 2026)
+
+**Decisión**: Los clientes creados por el consultor (nombre, URL, industria) se almacenan en la **cookie de iron-session** (`session.createdClients: StoredClient[]`), no en Firestore.
+
+**Por qué**: Elimina la necesidad de configurar Firestore para el demo. El consultor puede crear 10-15 clientes en 24 horas (duración de la cookie) sin ninguna dependencia de base de datos.
+
+**Limitaciones conocidas**:
+- Cookie: ~4KB máx → ~10-15 clientes máx antes de overflow
+- TTL: 24 horas → los clientes desaparecen al día siguiente
+- No persiste entre sesiones largas ni entre usuarios distintos
+
+**Estructura almacenada en cookie** (`frontend/lib/session.ts`):
+```typescript
+export interface StoredClient {
+  id: string       // slug generado del nombre ("tienda-moda-colombia")
+  name: string
+  websiteUrl: string
+  industry: string
+  createdAt: string  // ISO timestamp
+}
+
+export interface SessionData {
+  // ... auth fields
+  createdClients?: StoredClient[]  // lista de clientes creados en esta sesión
+}
+```
+
+**Endpoints** (`frontend/app/api/clients/route.ts`):
+- `POST /api/clients` — valida campos, genera id slug, normaliza URL con `https://`, agrega a `session.createdClients`, retorna `{ id }`
+- `DELETE /api/clients` — filtra el cliente por id y guarda la sesión actualizada
+
+**Flujo desde "Nuevo análisis"**:
+1. `GET /clients/new` → `NewClientForm` (nombre, URL, industria)
+2. Submit → `POST /api/clients` → responde `{ id }`
+3. Redirect a `/clients/${id}/chat?reset=true`
+4. `chat/page.tsx` resuelve: `mockClients.find()` primero, luego `session.createdClients.find()`, si no → `notFound()`
+
+**Migración a Firestore** (post-hackathon — para Mauro):
+
+| Qué cambiar | Dónde | Detalle |
+|---|---|---|
+| Schema Firestore | Nueva colección | `consultants/{userId}/clients/{clientId}` con mismos campos de `StoredClient` |
+| `POST /api/clients` | `api/clients/route.ts` | `db.collection('consultants').doc(userId).collection('clients').add(client)` en lugar de `session.createdClients.push()` |
+| `DELETE /api/clients` | `api/clients/route.ts` | `db.collection(...).doc(clientId).delete()` |
+| Home page | `app/page.tsx` | `db.collection('consultants').doc(userId).collection('clients').get()` en lugar de `session.createdClients` |
+| Chat page | `app/clients/[id]/chat/page.tsx` | `db.collection(...).doc(id).get()` en lugar de `session.createdClients.find()` |
+| Session | `lib/session.ts` | Eliminar `createdClients?: StoredClient[]` del tipo (ya no necesario en cookie) |
+
+> **Nota crítica**: Los tokens OAuth (`accessToken`, `refreshToken`) siguen en iron-session siempre. Solo la lista de clientes se mueve a Firestore. No mezclar: tokens en cookie (TTL corto, seguro), datos de clientes en Firestore (persistente).
 
 ---
 

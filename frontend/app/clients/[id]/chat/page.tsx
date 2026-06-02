@@ -4,28 +4,74 @@ import { cookies } from "next/headers"
 import { mockClients } from "@/lib/mock-clients"
 import { SessionData, sessionOptions } from "@/lib/session"
 import { parseA2UI } from "@/lib/parse-a2ui"
-import { ChatMessage } from "@/lib/types"
+import { Client, ChatMessage } from "@/lib/types"
 import { ChatClient } from "./ChatClient"
 
 const APP_NAME = "planner_agent"
 
 interface Props {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ reset?: string }>
 }
 
-export default async function ChatPage({ params }: Props) {
+export default async function ChatPage({ params, searchParams }: Props) {
   const { id } = await params
-  const client = mockClients.find((c) => c.id === id)
-  if (!client) notFound()
+  const { reset } = await searchParams
 
   const cookieStore = await cookies()
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
-
   if (!session.isLoggedIn) redirect("/")
 
-  const initialMessages = await loadSessionHistory(session.userEmail, id)
+  // Resolve client: mock first, then session-stored
+  const mockClient = mockClients.find((c) => c.id === id)
+  const storedClient = (session.createdClients ?? []).find((c) => c.id === id)
 
+  const client: Client | undefined = mockClient ?? (storedClient
+    ? {
+        id: storedClient.id,
+        name: storedClient.name,
+        websiteUrl: storedClient.websiteUrl,
+        industry: storedClient.industry,
+        status: "connected",
+        isDemo: false,
+      }
+    : undefined)
+
+  if (!client) notFound()
+
+  // Demo clients: serve hardcoded conversation, read-only
+  if (client.isDemo) {
+    return (
+      <ChatClient
+        client={client}
+        initialMessages={client.demoConversation ?? []}
+        readOnly
+      />
+    )
+  }
+
+  // Live client: real ADK session
+  if (reset === "true") {
+    await deleteAdkSession(session.userEmail, id)
+    return <ChatClient client={client} initialMessages={[]} />
+  }
+
+  const initialMessages = await loadSessionHistory(session.userEmail, id)
   return <ChatClient client={client} initialMessages={initialMessages} />
+}
+
+async function deleteAdkSession(userEmail: string | undefined, clientId: string) {
+  const adkUrl = process.env.AGENT_DEV_SERVER_URL ?? "http://127.0.0.1:8000"
+  const userId = (userEmail ?? "local_dev_user").replace(/[^a-zA-Z0-9_]/g, "_")
+  const sessionId = `grapez_${clientId}`
+
+  try {
+    await fetch(`${adkUrl}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`, {
+      method: "DELETE",
+    })
+  } catch {
+    // ADK server may not be running — session will be recreated on first message
+  }
 }
 
 async function loadSessionHistory(
@@ -41,12 +87,12 @@ async function loadSessionHistory(
       `${adkUrl}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`,
       { cache: "no-store" }
     )
-    if (!res.ok) return [] // 404 = sesión aún no existe
+    if (!res.ok) return []
 
     const data = await res.json()
     return eventsToMessages(data.events ?? [])
   } catch {
-    return [] // ADK server no disponible
+    return []
   }
 }
 
@@ -79,14 +125,13 @@ function eventsToMessages(events: AdkEvent[]): ChatMessage[] {
       id: currentId,
       role: currentRole,
       content: parsed.text ?? "",
-      a2ui: parsed.a2ui,
+      components: parsed.components,
       timestamp: currentTimestamp,
     })
     currentText = ""
   }
 
   for (const event of events) {
-    // Extraer solo partes de texto (skip function_call / function_response)
     const textParts =
       event.content?.parts?.filter(
         (p) => typeof p.text === "string" && p.text && !p.function_call && !p.function_response
