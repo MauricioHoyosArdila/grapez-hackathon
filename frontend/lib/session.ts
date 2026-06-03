@@ -5,6 +5,7 @@ export interface StoredClient {
   name: string
   websiteUrl: string
   industry: string
+  modo: "auditoria" | "auditoria_implementacion"
   createdAt: string
 }
 

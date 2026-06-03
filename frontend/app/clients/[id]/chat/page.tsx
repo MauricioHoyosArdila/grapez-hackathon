@@ -41,6 +41,7 @@ export default async function ChatPage({ params, searchParams }: Props) {
         name: storedClient.name,
         websiteUrl: storedClient.websiteUrl,
         industry: storedClient.industry,
+        modo: storedClient.modo,
         status: "connected",
         isDemo: false,
       }

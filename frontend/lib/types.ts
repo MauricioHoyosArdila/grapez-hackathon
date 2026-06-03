@@ -3,6 +3,7 @@ export interface Client {
   name: string
   websiteUrl: string
   industry: string
+  modo?: "auditoria" | "auditoria_implementacion"
   status: "connected" | "pending" | "error"
   lastDiagnosed?: string
   isDemo?: boolean
@@ -24,6 +25,7 @@ export type A2UIComponent =
   | A2UIProgress
   | A2UISummaryCard
   | A2UIChoiceCard
+  | A2UIImageCard
 
 export interface A2UITable {
   __a2ui: true
@@ -74,4 +76,13 @@ export interface A2UIChoiceCard {
   title: string
   description?: string
   choices: { id: string; label: string; description?: string }[]
+}
+
+export interface A2UIImageCard {
+  __a2ui: true
+  type: "image_card"
+  title: string
+  image_base64: string
+  caption?: string
+  elements?: Array<{ label: string; selector: string }>
 }

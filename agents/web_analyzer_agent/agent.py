@@ -10,6 +10,7 @@ from google.adk.agents import LlmAgent
 from google.genai import types
 
 from agents.shared.prompts import GA4_STANDARDS, GTM_STANDARDS
+from agents.web_analyzer_agent.tools.playwright_tools import screenshot_site, analyze_site
 
 root_agent = LlmAgent(
     model="gemini-2.5-flash",
@@ -132,5 +133,5 @@ Máximo 3 ambigüedades. Solo preguntas específicas para este cliente — no ge
         + "\n\n"
         + GTM_STANDARDS
     ),
-    tools=[],  # playwright_tools se agregan en Semana 3 cuando el Playwright Service esté listo
+    tools=[screenshot_site, analyze_site],
 )

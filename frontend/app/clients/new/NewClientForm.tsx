@@ -16,10 +16,24 @@ const INDUSTRIES = [
   "Otro",
 ]
 
+const MODO_OPTIONS = [
+  {
+    value: "auditoria" as const,
+    label: "Solo auditoría",
+    description: "Diagnóstico completo del ecosistema (GA4 + GTM + sitio web). Te entrego el análisis y las recomendaciones sin aplicar cambios.",
+  },
+  {
+    value: "auditoria_implementacion" as const,
+    label: "Auditoría + implementación",
+    description: "Diagnóstico completo, y luego aplico los cambios que confirmes, uno por uno, con tu aprobación explícita antes de cada acción.",
+  },
+]
+
 export function NewClientForm() {
   const [name, setName] = useState("")
   const [websiteUrl, setWebsiteUrl] = useState("")
   const [industry, setIndustry] = useState("")
+  const [modo, setModo] = useState<"auditoria" | "auditoria_implementacion">("auditoria")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -35,7 +49,7 @@ export function NewClientForm() {
       const res = await fetch("/api/clients", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), websiteUrl: websiteUrl.trim(), industry }),
+        body: JSON.stringify({ name: name.trim(), websiteUrl: websiteUrl.trim(), industry, modo }),
       })
 
       if (!res.ok) {
@@ -108,6 +122,41 @@ export function NewClientForm() {
             <option key={ind} value={ind}>{ind}</option>
           ))}
         </select>
+      </div>
+
+      {/* Modo de análisis */}
+      <div>
+        <p className="block text-xs font-bold text-ggray2 uppercase tracking-wider mb-3">
+          Modo de análisis
+        </p>
+        <div className="space-y-2">
+          {MODO_OPTIONS.map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                modo === opt.value
+                  ? "border-glime/60 bg-glime/5"
+                  : "border-gdark hover:border-ggray3/50"
+              } ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              <input
+                type="radio"
+                name="modo"
+                value={opt.value}
+                checked={modo === opt.value}
+                onChange={() => setModo(opt.value)}
+                disabled={loading}
+                className="mt-0.5 accent-[#D9FF8B] shrink-0"
+              />
+              <div>
+                <p className={`text-sm font-semibold ${modo === opt.value ? "text-glime" : "text-white"}`}>
+                  {opt.label}
+                </p>
+                <p className="text-xs text-ggray3 mt-0.5 leading-relaxed">{opt.description}</p>
+              </div>
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Error */}

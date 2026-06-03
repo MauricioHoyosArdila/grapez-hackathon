@@ -20,6 +20,24 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
   const [loading, setLoading] = useState(false)
   const [resetting, setResetting] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const autoSentRef = useRef(false)
+
+  // Auto-send first message with client context when chat opens fresh
+  useEffect(() => {
+    if (readOnly || initialMessages.length > 0 || autoSentRef.current) return
+    autoSentRef.current = true
+    const modoLabel = client.modo === "auditoria_implementacion"
+      ? "Auditoría + implementación"
+      : "Solo auditoría"
+    const firstMessage = [
+      `Nuevo análisis para: ${client.name}`,
+      `Sitio web: ${client.websiteUrl}`,
+      `Modelo de negocio: ${client.industry}`,
+      `Modo: ${modoLabel}`,
+    ].join("\n")
+    submitMessage(firstMessage)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })

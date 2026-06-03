@@ -6,6 +6,7 @@ import { ActionCard } from "./ActionCard"
 import { ProgressBar } from "./ProgressBar"
 import { SummaryCard } from "./SummaryCard"
 import { ChoiceCard } from "./ChoiceCard"
+import { ImageCard } from "./ImageCard"
 
 interface A2UIRendererProps {
   component: A2UIComponent
@@ -26,6 +27,8 @@ export function A2UIRenderer({ component, onConfirm, onCancel, onChoice }: A2UIR
       return <SummaryCard data={component} />
     case "choice_card":
       return <ChoiceCard data={component} onChoice={onChoice} />
+    case "image_card":
+      return <ImageCard data={component} />
   }
 }
 

@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   const name: string = (body.name ?? "").trim()
   const websiteUrl: string = normalizeUrl(body.websiteUrl ?? "")
   const industry: string = (body.industry ?? "").trim()
+  const modo = body.modo === "auditoria_implementacion" ? "auditoria_implementacion" : "auditoria" as const
 
   if (!name || !websiteUrl || !industry) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 })
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
     name,
     websiteUrl,
     industry,
+    modo,
     createdAt: new Date().toISOString(),
   }
 
