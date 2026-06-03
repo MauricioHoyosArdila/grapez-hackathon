@@ -1,5 +1,3 @@
-import os
-
 from google.adk.tools import ToolContext
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
@@ -9,22 +7,9 @@ from google.analytics.data_v1beta.types import (
     OrderBy,
     RunReportRequest,
 )
-from google.oauth2.credentials import Credentials
 import google.auth.exceptions
 
-
-def _build_credentials(tool_context: ToolContext) -> Credentials:
-    return Credentials(
-        token=tool_context.state.get("access_token"),
-        refresh_token=tool_context.state.get("refresh_token"),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GOOGLE_CLIENT_ID"],
-        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
-    )
-
-
-def _data_client(tool_context: ToolContext) -> BetaAnalyticsDataClient:
-    return BetaAnalyticsDataClient(credentials=_build_credentials(tool_context))
+from agents.shared.token_utils import build_credentials, sync_token
 
 
 def get_events_last_30_days(property_id: str, tool_context: ToolContext) -> dict:
@@ -36,7 +21,8 @@ def get_events_last_30_days(property_id: str, tool_context: ToolContext) -> dict
         property_id: ID numérico de la propiedad GA4 (sin el prefijo 'properties/')
     """
     try:
-        client = _data_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = BetaAnalyticsDataClient(credentials=creds)
         response = client.run_report(
             request=RunReportRequest(
                 property=f"properties/{property_id}",
@@ -52,6 +38,7 @@ def get_events_last_30_days(property_id: str, tool_context: ToolContext) -> dict
                 limit=50,
             )
         )
+        sync_token(creds, tool_context)
         events = [
             {
                 "event_name": row.dimension_values[0].value,
@@ -79,7 +66,8 @@ def get_conversion_report(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _data_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = BetaAnalyticsDataClient(credentials=creds)
         response = client.run_report(
             request=RunReportRequest(
                 property=f"properties/{property_id}",
@@ -99,6 +87,7 @@ def get_conversion_report(property_id: str, tool_context: ToolContext) -> dict:
                 limit=20,
             )
         )
+        sync_token(creds, tool_context)
         rows = [
             {
                 "event_name": row.dimension_values[0].value,
@@ -129,7 +118,8 @@ def check_data_freshness(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _data_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = BetaAnalyticsDataClient(credentials=creds)
         response = client.run_report(
             request=RunReportRequest(
                 property=f"properties/{property_id}",
@@ -145,6 +135,7 @@ def check_data_freshness(property_id: str, tool_context: ToolContext) -> dict:
                 limit=7,
             )
         )
+        sync_token(creds, tool_context)
         if not response.rows:
             return {
                 "has_data": False,

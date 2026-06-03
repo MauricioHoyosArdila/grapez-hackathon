@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
   session.isLoggedIn = true
   session.accessToken = tokens.access_token
   session.refreshToken = tokens.refresh_token
+  session.tokenExpiry = Date.now() + ((tokens.expires_in ?? 3600) - 300) * 1000
   session.userEmail = user.email
   await session.save()
 

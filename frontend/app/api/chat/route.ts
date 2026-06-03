@@ -16,6 +16,18 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  try {
+    await refreshTokensIfNeeded(session)
+  } catch (err) {
+    if ((err as { code?: string }).code === "token_expired") {
+      return new Response(JSON.stringify({ error: "token_expired" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    throw err
+  }
+
   const { message, clientId } = await req.json()
 
   const userId = (session.userEmail ?? "local-dev-user").replace(/[^a-z0-9-]/g, "-")
@@ -23,6 +35,7 @@ export async function POST(req: NextRequest) {
   const tokens = {
     access_token: session.accessToken ?? "",
     refresh_token: session.refreshToken ?? "",
+    token_expiry: session.tokenExpiry ? Math.floor(session.tokenExpiry / 1000) : 0,
   }
 
   try {
@@ -61,6 +74,39 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "application/json" },
     })
   }
+}
+
+// ─── Token refresh ───────────────────────────────────────────────────────────
+
+async function refreshTokensIfNeeded(session: SessionData): Promise<void> {
+  if (!session.refreshToken) {
+    throw Object.assign(new Error("no_refresh_token"), { code: "token_expired" })
+  }
+  const notExpired = session.tokenExpiry && Date.now() < session.tokenExpiry
+  if (notExpired) return
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: session.refreshToken,
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  })
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "")
+    console.error("[token refresh] failed:", res.status, errBody.slice(0, 200))
+    throw Object.assign(new Error("token_refresh_failed"), { code: "token_expired" })
+  }
+
+  const data = await res.json()
+  session.accessToken = data.access_token
+  session.tokenExpiry = Date.now() + ((data.expires_in ?? 3600) - 300) * 1000
+  await session.save()
+  console.log("[token refresh] refreshed successfully, new expiry in", data.expires_in ?? 3600, "s")
 }
 
 // ─── Local ADK dev server ────────────────────────────────────────────────────
@@ -160,7 +206,7 @@ async function callAgentRuntime(
   // Tokens embedded in message — the agent reads [Sistema: ...] and calls
   // load_client_tokens(access_token, refresh_token) on its first turn.
   const messageWithTokens = tokens.access_token
-    ? `[Sistema: access_token=${tokens.access_token} refresh_token=${tokens.refresh_token}]\n\n${message}`
+    ? `[Sistema: access_token=${tokens.access_token} refresh_token=${tokens.refresh_token} token_expiry=${tokens.token_expiry}]\n\n${message}`
     : message
 
   const body: Record<string, unknown> = {

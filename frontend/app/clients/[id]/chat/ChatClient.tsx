@@ -68,7 +68,24 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
         body: JSON.stringify({ message: text.trim(), clientId: client.id }),
       })
 
-      if (!res.ok) throw new Error("Error del servidor")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        if (res.status === 401 && data.error === "token_expired") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content:
+                      "Tu sesión de Google expiró. [Reconectar cuenta Google](/api/oauth/google/start)",
+                  }
+                : m
+            )
+          )
+          return
+        }
+        throw new Error("Error del servidor")
+      }
       if (!res.body) throw new Error("No stream")
 
       const reader = res.body.getReader()

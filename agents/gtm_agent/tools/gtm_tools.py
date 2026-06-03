@@ -1,23 +1,8 @@
-import os
-
 from google.adk.tools import ToolContext
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import google.auth.exceptions
 
-
-def _build_credentials(tool_context: ToolContext) -> Credentials:
-    return Credentials(
-        token=tool_context.state.get("access_token"),
-        refresh_token=tool_context.state.get("refresh_token"),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GOOGLE_CLIENT_ID"],
-        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
-    )
-
-
-def _gtm_client(tool_context: ToolContext):
-    return build("tagmanager", "v2", credentials=_build_credentials(tool_context))
+from agents.shared.token_utils import build_credentials, sync_token
 
 
 # ── DIAGNÓSTICO (read) ────────────────────────────────────────────────────────
@@ -25,8 +10,10 @@ def _gtm_client(tool_context: ToolContext):
 def list_accounts(tool_context: ToolContext) -> dict:
     """Lista todas las cuentas de Google Tag Manager accesibles con las credenciales del cliente."""
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         response = service.accounts().list().execute()
+        sync_token(creds, tool_context)
         accounts = response.get("account", [])
         return {
             "accounts": [
@@ -52,9 +39,11 @@ def list_containers(account_id: str, tool_context: ToolContext) -> dict:
         account_id: ID numérico de la cuenta GTM (ej: "123456")
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}"
         response = service.accounts().containers().list(parent=parent).execute()
+        sync_token(creds, tool_context)
         containers = response.get("container", [])
         return {
             "containers": [
@@ -84,9 +73,11 @@ def get_container(account_id: str, container_id: str, tool_context: ToolContext)
         container_id: ID numérico del contenedor
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}"
         c = service.accounts().containers().get(path=path).execute()
+        sync_token(creds, tool_context)
         return {
             "id": c["containerId"],
             "name": c["name"],
@@ -111,9 +102,11 @@ def list_workspaces(account_id: str, container_id: str, tool_context: ToolContex
         container_id: ID numérico del contenedor
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}"
         response = service.accounts().containers().workspaces().list(parent=parent).execute()
+        sync_token(creds, tool_context)
         workspaces = response.get("workspace", [])
         return {
             "workspaces": [
@@ -145,9 +138,11 @@ def list_tags(
         workspace_id: ID numérico del workspace
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         response = service.accounts().containers().workspaces().tags().list(parent=parent).execute()
+        sync_token(creds, tool_context)
         tags = response.get("tag", [])
         return {
             "tags": [
@@ -182,11 +177,13 @@ def list_triggers(
         workspace_id: ID numérico del workspace
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         response = (
             service.accounts().containers().workspaces().triggers().list(parent=parent).execute()
         )
+        sync_token(creds, tool_context)
         triggers = response.get("trigger", [])
         return {
             "triggers": [
@@ -218,11 +215,13 @@ def list_variables(
         workspace_id: ID numérico del workspace
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         response = (
             service.accounts().containers().workspaces().variables().list(parent=parent).execute()
         )
+        sync_token(creds, tool_context)
         variables = response.get("variable", [])
         return {
             "variables": [
@@ -251,7 +250,8 @@ def list_versions(account_id: str, container_id: str, tool_context: ToolContext)
         container_id: ID numérico del contenedor
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}"
         response = (
             service.accounts()
@@ -260,6 +260,7 @@ def list_versions(account_id: str, container_id: str, tool_context: ToolContext)
             .list(parent=parent)
             .execute()
         )
+        sync_token(creds, tool_context)
         versions = response.get("containerVersionHeader", [])
         return {
             "versions": [
@@ -293,9 +294,11 @@ def get_container_version(
         version_id: ID numérico de la versión (o "live" para la versión publicada actual)
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/versions/{version_id}"
         v = service.accounts().containers().versions().get(path=path).execute()
+        sync_token(creds, tool_context)
         return {
             "version_id": v.get("containerVersionId", ""),
             "name": v.get("name", ""),
@@ -325,11 +328,13 @@ def get_workspace_status(
         workspace_id: ID numérico del workspace
     """
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         status = (
             service.accounts().containers().workspaces().getStatus(path=path).execute()
         )
+        sync_token(creds, tool_context)
         changes = status.get("containerChange", [])
         return {
             "pending_changes": len(changes),
@@ -371,12 +376,14 @@ def create_workspace(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}"
         workspace = service.accounts().containers().workspaces().create(
             parent=parent,
             body={"name": name, "description": description},
         ).execute()
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "workspace_id": workspace["workspaceId"],
@@ -420,7 +427,8 @@ def create_tag(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         tag_body = {
             "name": name,
@@ -436,6 +444,7 @@ def create_tag(
             .create(parent=parent, body=tag_body)
             .execute()
         )
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "tag_id": tag["tagId"],
@@ -479,7 +488,8 @@ def create_trigger(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         trigger_body = {
             "name": name,
@@ -494,6 +504,7 @@ def create_trigger(
             .create(parent=parent, body=trigger_body)
             .execute()
         )
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "trigger_id": trigger["triggerId"],
@@ -538,7 +549,8 @@ def create_variable(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         parent = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         variable_body = {
             "name": name,
@@ -553,6 +565,7 @@ def create_variable(
             .create(parent=parent, body=variable_body)
             .execute()
         )
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "variable_id": variable["variableId"],
@@ -594,7 +607,8 @@ def create_version(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}"
         result = (
             service.accounts()
@@ -606,6 +620,7 @@ def create_version(
             )
             .execute()
         )
+        sync_token(creds, tool_context)
         version = result.get("containerVersion", {})
         return {
             "success": True,
@@ -651,13 +666,15 @@ def rename_gtm_tag(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/tags/{tag_id}"
         tag = service.accounts().containers().workspaces().tags().get(path=path).execute()
         tag["name"] = new_name
         updated = service.accounts().containers().workspaces().tags().update(
             path=path, body=tag
         ).execute()
+        sync_token(creds, tool_context)
         return {"success": True, "tag_id": tag_id, "new_name": updated["name"]}
     except google.auth.exceptions.RefreshError:
         return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
@@ -693,13 +710,15 @@ def rename_gtm_trigger(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/triggers/{trigger_id}"
         trigger = service.accounts().containers().workspaces().triggers().get(path=path).execute()
         trigger["name"] = new_name
         updated = service.accounts().containers().workspaces().triggers().update(
             path=path, body=trigger
         ).execute()
+        sync_token(creds, tool_context)
         return {"success": True, "trigger_id": trigger_id, "new_name": updated["name"]}
     except google.auth.exceptions.RefreshError:
         return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
@@ -735,13 +754,15 @@ def rename_gtm_variable(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/variables/{variable_id}"
         variable = service.accounts().containers().workspaces().variables().get(path=path).execute()
         variable["name"] = new_name
         updated = service.accounts().containers().workspaces().variables().update(
             path=path, body=variable
         ).execute()
+        sync_token(creds, tool_context)
         return {"success": True, "variable_id": variable_id, "new_name": updated["name"]}
     except google.auth.exceptions.RefreshError:
         return {"error": "Tokens OAuth expirados. El cliente debe reconectar su cuenta Google."}
@@ -775,13 +796,15 @@ def pause_gtm_tag(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/workspaces/{workspace_id}/tags/{tag_id}"
         tag = service.accounts().containers().workspaces().tags().get(path=path).execute()
         tag["paused"] = True
         updated = service.accounts().containers().workspaces().tags().update(
             path=path, body=tag
         ).execute()
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "tag_id": tag_id,
@@ -820,9 +843,11 @@ def publish_version(
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        service = _gtm_client(tool_context)
+        creds = build_credentials(tool_context)
+        service = build("tagmanager", "v2", credentials=creds)
         path = f"accounts/{account_id}/containers/{container_id}/versions/{version_id}"
         result = service.accounts().containers().versions().publish(path=path).execute()
+        sync_token(creds, tool_context)
         version = result.get("containerVersion", {})
         return {
             "success": True,

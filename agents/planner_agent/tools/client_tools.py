@@ -1,7 +1,12 @@
 from google.adk.tools import ToolContext
 
 
-def load_client_tokens(access_token: str, refresh_token: str, tool_context: ToolContext) -> dict:
+def load_client_tokens(
+    access_token: str,
+    refresh_token: str,
+    tool_context: ToolContext,
+    token_expiry: float = 0.0,
+) -> dict:
     """
     Carga los tokens OAuth del cliente en el estado de sesión.
     En producción los tokens ya llegan via initialState del frontend — no es necesario llamar esta función.
@@ -10,9 +15,14 @@ def load_client_tokens(access_token: str, refresh_token: str, tool_context: Tool
     Args:
         access_token: Token de acceso OAuth2 de Google del cliente
         refresh_token: Token de refresco OAuth2 de Google del cliente
+        token_expiry: Timestamp Unix (segundos) de expiración del access_token.
+                      El frontend lo calcula como (expires_in - 300) segundos desde ahora.
+                      Si es 0, build_credentials() refrescará proactivamente en la primera tool call.
     """
     tool_context.state["access_token"] = access_token
     tool_context.state["refresh_token"] = refresh_token
+    if token_expiry > 0:
+        tool_context.state["token_expiry"] = token_expiry
     return {
         "status": "tokens_loaded",
         "message": "Tokens OAuth cargados. Listo para diagnosticar.",

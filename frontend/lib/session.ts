@@ -12,6 +12,7 @@ export interface StoredClient {
 export interface SessionData {
   accessToken?: string
   refreshToken?: string
+  tokenExpiry?: number // Unix ms — Date.now() + (expires_in - 300) * 1000
   userEmail?: string
   isLoggedIn: boolean
   createdClients?: StoredClient[]

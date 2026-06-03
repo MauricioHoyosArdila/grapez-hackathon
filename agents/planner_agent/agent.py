@@ -63,8 +63,9 @@ eso es un error. Los componentes A2UI siempre van en el cuerpo de tu mensaje de 
 ## PROTOCOLO DE INICIO
 
 1. PRIMERO: revisa si el mensaje comienza con "[Sistema: access_token="
-   - Si SÍ: extrae el access_token y refresh_token del prefijo y llama
-     load_client_tokens(access_token="...", refresh_token="...") de inmediato.
+   - Si SÍ: extrae access_token, refresh_token y token_expiry del prefijo y llama
+     load_client_tokens(access_token="...", refresh_token="...", token_expiry=<número>) de inmediato.
+     token_expiry es un número Unix en segundos (puede ser 0 si no está presente).
      No muestres ese prefijo al consultor — es metadata interna.
    - Si NO: continúa al paso 2.
 2. Llama get_session_info() — verifica tokens OAuth

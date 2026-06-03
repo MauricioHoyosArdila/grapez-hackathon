@@ -8,23 +8,10 @@ from google.analytics.admin import (
     DataRetentionSettings,
     ListPropertiesRequest,
 )
-from google.oauth2.credentials import Credentials
 from google.protobuf import field_mask_pb2
 import google.auth.exceptions
 
-
-def _build_credentials(tool_context: ToolContext) -> Credentials:
-    return Credentials(
-        token=tool_context.state.get("access_token"),
-        refresh_token=tool_context.state.get("refresh_token"),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GOOGLE_CLIENT_ID"],
-        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
-    )
-
-
-def _admin_client(tool_context: ToolContext) -> AnalyticsAdminServiceClient:
-    return AnalyticsAdminServiceClient(credentials=_build_credentials(tool_context))
+from agents.shared.token_utils import build_credentials, sync_token
 
 
 # ── DIAGNÓSTICO (read) ────────────────────────────────────────────────────────
@@ -32,8 +19,10 @@ def _admin_client(tool_context: ToolContext) -> AnalyticsAdminServiceClient:
 def list_accounts(tool_context: ToolContext) -> dict:
     """Lista todas las cuentas de Google Analytics 4 accesibles con las credenciales del cliente."""
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         accounts = list(client.list_accounts())
+        sync_token(creds, tool_context)
         return {
             "accounts": [
                 {
@@ -58,9 +47,11 @@ def list_properties(account_id: str, tool_context: ToolContext) -> dict:
         account_id: ID numérico de la cuenta GA4 (ej: "123456789")
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         request = ListPropertiesRequest(filter=f"parent:accounts/{account_id}")
         properties = list(client.list_properties(request=request))
+        sync_token(creds, tool_context)
         return {
             "properties": [
                 {
@@ -88,8 +79,10 @@ def get_property_details(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad (ej: "456789012")
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         prop = client.get_property(name=f"properties/{property_id}")
+        sync_token(creds, tool_context)
         return {
             "id": property_id,
             "display_name": prop.display_name,
@@ -114,8 +107,10 @@ def list_data_streams(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         streams = list(client.list_data_streams(parent=f"properties/{property_id}"))
+        sync_token(creds, tool_context)
         result = []
         for s in streams:
             stream_info = {
@@ -144,10 +139,12 @@ def check_enhanced_measurement(property_id: str, stream_id: str, tool_context: T
         stream_id: ID del stream web (obtenido con list_data_streams)
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         settings = client.get_enhanced_measurement_settings(
             name=f"properties/{property_id}/dataStreams/{stream_id}/enhancedMeasurementSettings"
         )
+        sync_token(creds, tool_context)
         return {
             "stream_measurements_enabled": settings.stream_enabled,
             "page_changes_enabled": settings.page_changes_enabled,
@@ -171,8 +168,10 @@ def list_conversions(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         conversions = list(client.list_conversion_events(parent=f"properties/{property_id}"))
+        sync_token(creds, tool_context)
         return {
             "conversions": [
                 {
@@ -199,8 +198,10 @@ def list_custom_dimensions(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         dimensions = list(client.list_custom_dimensions(parent=f"properties/{property_id}"))
+        sync_token(creds, tool_context)
         return {
             "custom_dimensions": [
                 {
@@ -227,8 +228,10 @@ def list_custom_metrics(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         metrics = list(client.list_custom_metrics(parent=f"properties/{property_id}"))
+        sync_token(creds, tool_context)
         return {
             "custom_metrics": [
                 {
@@ -256,8 +259,10 @@ def list_audiences(property_id: str, tool_context: ToolContext) -> dict:
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         audiences = list(client.list_audiences(parent=f"properties/{property_id}"))
+        sync_token(creds, tool_context)
         return {
             "audiences": [
                 {
@@ -284,10 +289,12 @@ def get_data_retention_settings(property_id: str, tool_context: ToolContext) -> 
         property_id: ID numérico de la propiedad GA4
     """
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         settings = client.get_data_retention_settings(
             name=f"properties/{property_id}/dataRetentionSettings"
         )
+        sync_token(creds, tool_context)
         retention_str = str(settings.event_data_retention).split(".")[-1]
         months = 14 if "FOURTEEN" in retention_str else 2
         return {
@@ -321,11 +328,13 @@ def create_conversion_event(property_id: str, event_name: str, tool_context: Too
         }
     tool_context.state["implementation_confirmed"] = False
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         result = client.create_conversion_event(
             parent=f"properties/{property_id}",
             conversion_event=ConversionEvent(event_name=event_name),
         )
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "event_name": result.event_name,
@@ -370,7 +379,8 @@ def create_custom_dimension(
         return {"error": f"Scope inválido: '{scope}'. Usar 'EVENT' o 'USER'."}
 
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         result = client.create_custom_dimension(
             parent=f"properties/{property_id}",
             custom_dimension=CustomDimension(
@@ -380,6 +390,7 @@ def create_custom_dimension(
                 description=description,
             ),
         )
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "id": result.name.split("/")[-1],
@@ -414,7 +425,8 @@ def update_data_retention(property_id: str, months: int, tool_context: ToolConte
         return {"error": "El período de retención debe ser 2 o 14 meses."}
 
     try:
-        client = _admin_client(tool_context)
+        creds = build_credentials(tool_context)
+        client = AnalyticsAdminServiceClient(credentials=creds)
         retention_value = (
             DataRetentionSettings.RetentionDuration.TWO_MONTHS
             if months == 2
@@ -430,6 +442,7 @@ def update_data_retention(property_id: str, months: int, tool_context: ToolConte
                 paths=["event_data_retention", "reset_user_data_on_new_activity"]
             ),
         )
+        sync_token(creds, tool_context)
         return {
             "success": True,
             "retention_months": months,
