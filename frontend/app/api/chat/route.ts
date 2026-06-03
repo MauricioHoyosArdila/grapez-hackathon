@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { getIronSession } from "iron-session"
+import { getIronSession, type IronSession } from "iron-session"
 import { SessionData, sessionOptions } from "@/lib/session"
 import { cookies } from "next/headers"
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 
 // ─── Token refresh ───────────────────────────────────────────────────────────
 
-async function refreshTokensIfNeeded(session: SessionData): Promise<void> {
+async function refreshTokensIfNeeded(session: IronSession<SessionData>): Promise<void> {
   if (!session.refreshToken) {
     throw Object.assign(new Error("no_refresh_token"), { code: "token_expired" })
   }
