@@ -115,7 +115,7 @@ async function callLocalAdk(
   userId: string,
   sessionId: string,
   message: string,
-  tokens: { access_token: string; refresh_token: string }
+  tokens: { access_token: string; refresh_token: string; token_expiry: number }
 ): Promise<ReadableStream<Uint8Array>> {
   const base = process.env.AGENT_DEV_SERVER_URL ?? "http://127.0.0.1:8000"
 
@@ -144,7 +144,7 @@ async function ensureAdkSession(
   base: string,
   userId: string,
   sessionId: string,
-  tokens: { access_token: string; refresh_token: string }
+  tokens: { access_token: string; refresh_token: string; token_expiry: number }
 ) {
   const sessionsBase = `${base}/apps/${APP_NAME}/users/${userId}/sessions`
   const check = await fetch(`${sessionsBase}/${sessionId}`)
@@ -171,7 +171,7 @@ async function callAgentRuntime(
   userId: string,
   storedSessionId: string | null,
   message: string,
-  tokens: { access_token: string; refresh_token: string }
+  tokens: { access_token: string; refresh_token: string; token_expiry: number }
 ): Promise<{ stream: ReadableStream<Uint8Array>; sessionId: string | null }> {
   const region = process.env.AGENT_ENGINE_REGION ?? "us-central1"
   const project = process.env.AGENT_ENGINE_PROJECT
