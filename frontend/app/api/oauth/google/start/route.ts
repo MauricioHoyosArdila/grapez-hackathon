@@ -10,10 +10,14 @@ const SCOPES = [
   "profile",
 ]
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  const redirectUri =
+    process.env.OAUTH_REDIRECT_URI ??
+    new URL("/api/oauth/google/callback", req.nextUrl.origin).toString()
+
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: process.env.OAUTH_REDIRECT_URI!,
+    redirect_uri: redirectUri,
     response_type: "code",
     scope: SCOPES.join(" "),
     access_type: "offline",

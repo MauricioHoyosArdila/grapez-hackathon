@@ -14,6 +14,8 @@ export interface SessionData {
   userEmail?: string
   isLoggedIn: boolean
   createdClients?: StoredClient[]
+  // Agent Runtime session IDs keyed by clientId — server-assigned, persisted across messages
+  agentSessions?: Record<string, string>
 }
 
 export const sessionOptions: SessionOptions = {

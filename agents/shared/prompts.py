@@ -12,6 +12,12 @@ COMMUNICATION_RULES = """- Habla siempre en el idioma del consultor (español po
 - No inventes datos — solo reporta lo que los agentes te devuelvan"""
 
 A2UI_FORMAT_EXAMPLES = """\
+## REGLA CRÍTICA — SALIDA A2UI
+
+Los componentes A2UI son TEXTO PLANO en tu respuesta. NO son llamadas a funciones.
+NUNCA uses display_a2ui_card(), print(), ni ninguna otra función para mostrarlos.
+NUNCA escribas código Python. Solo incluye el bloque ```json ... ``` directamente en tu mensaje.
+
 Cuando presentes resultados de diagnóstico, incluye SIEMPRE un bloque JSON con este formato exacto:
 
 ```json

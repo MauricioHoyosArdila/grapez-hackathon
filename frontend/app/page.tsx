@@ -23,26 +23,26 @@ export default async function HomePage() {
           {session.isLoggedIn ? (
             <div className="flex items-center gap-3">
               <span className="text-xs text-ggray3 hidden sm:block">{session.userEmail}</span>
-              <Link
+              <a
                 href="/api/oauth/google/start"
                 className="text-xs border border-gdark px-3 py-1.5 rounded-full text-ggray2 hover:border-glime/50 hover:text-glime transition-colors"
               >
                 Reconectar Google
-              </Link>
-              <Link
+              </a>
+              <a
                 href="/api/oauth/google/logout"
                 className="text-xs text-ggray3 hover:text-white transition-colors"
               >
                 Cerrar sesión
-              </Link>
+              </a>
             </div>
           ) : (
-            <Link
+            <a
               href="/api/oauth/google/start"
               className="text-sm font-bold px-4 py-1.5 bg-glime text-gblack rounded-full hover:bg-[#c8f070] transition-colors"
             >
               Conectar Google
-            </Link>
+            </a>
           )}
         </div>
       </nav>
@@ -176,12 +176,12 @@ export default async function HomePage() {
               web de tus clientes con agentes de IA especializados.
             </p>
           </div>
-          <Link
+          <a
             href="/api/oauth/google/start"
             className="px-7 py-3 bg-glime text-gblack text-sm font-bold rounded-full hover:bg-[#c8f070] transition-colors"
           >
             Conectar cuenta Google
-          </Link>
+          </a>
         </div>
       )}
     </main>

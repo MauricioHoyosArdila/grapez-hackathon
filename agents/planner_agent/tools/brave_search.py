@@ -1,4 +1,3 @@
-import asyncio
 import os
 import httpx
 from google.adk.tools import ToolContext
@@ -17,7 +16,7 @@ def _get_identity_token(audience: str) -> str | None:
             timeout=5,
         )
         if response.status_code == 200:
-            return response.text
+            return response.text.strip()
     except Exception:
         pass
     return None
@@ -87,7 +86,21 @@ def _call_direct(query: str) -> dict:
     }
 
 
-def brave_web_search(query: str, tool_context: ToolContext) -> dict:
+def _run_mcp_in_thread(query: str, mcp_url: str) -> dict:
+    """
+    Runs the async MCP call in a fresh event loop inside a thread pool worker.
+    This isolates streamablehttp_client's anyio.TaskGroup from ADK's own event loop,
+    avoiding the 'unhandled errors in a TaskGroup' conflict.
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_call_via_mcp(query, mcp_url))
+    finally:
+        loop.close()
+
+
+async def brave_web_search(query: str, tool_context: ToolContext) -> dict:
     """
     Busca información del negocio del cliente usando Brave Search.
     En producción (Agent Runtime) conecta via protocolo MCP con autenticación Google.
@@ -103,10 +116,13 @@ def brave_web_search(query: str, tool_context: ToolContext) -> dict:
 
     if mcp_url:
         try:
-            return asyncio.run(_call_via_mcp(query, mcp_url))
+            import asyncio
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, _run_mcp_in_thread, query, mcp_url)
+            return result
         except Exception as exc:
             fallback = _call_direct(query)
-            fallback["mcp_error"] = str(exc)
+            fallback["mcp_error"] = f"{type(exc).__name__}: {exc}"
             return fallback
 
     return _call_direct(query)

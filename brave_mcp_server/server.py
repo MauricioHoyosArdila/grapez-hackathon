@@ -25,7 +25,8 @@ async def brave_web_search(query: str) -> dict:
     Returns:
         dict with 'results' list, each item having 'title', 'url', 'description'
     """
-    api_key = os.environ.get("BRAVE_API_KEY", "")
+    # lstrip('﻿') removes UTF-8 BOM that PowerShell may inject when piping to Secret Manager
+    api_key = os.environ.get("BRAVE_API_KEY", "").lstrip('﻿').strip()
     if not api_key:
         return {
             "error": "BRAVE_API_KEY not configured in server environment.",
@@ -69,7 +70,29 @@ async def brave_web_search(query: str) -> dict:
     return {"query": query, "total_results": len(results), "results": results}
 
 
+class _CloudRunHostMiddleware:
+    """
+    FastMCP allows 'localhost:*' by default (DNS rebinding protection).
+    Cloud Run sends the public domain as Host, which fails that check with 421.
+    This middleware rewrites the Host header to 'localhost:{port}' so it matches
+    the 'localhost:*' wildcard pattern that FastMCP accepts.
+    """
+
+    def __init__(self, app, port: int):
+        self.app = app
+        self._host = f"localhost:{port}".encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            headers = [
+                (b"host", self._host) if k == b"host" else (k, v)
+                for k, v in scope.get("headers", [])
+            ]
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app = mcp.streamable_http_app()
+    app = _CloudRunHostMiddleware(mcp.streamable_http_app(), port)
     uvicorn.run(app, host="0.0.0.0", port=port)

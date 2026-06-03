@@ -118,6 +118,10 @@ Write-Host ""
 $adk = Join-Path $ProjectRoot ".venv\Scripts\adk.exe"
 if (-not (Test-Path $adk)) { $adk = "adk" }  # fallback a PATH
 
+# Forzar UTF-8 para que los emojis en el output de adk no causen charmap errors en Windows
+$env:PYTHONUTF8 = "1"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 & $adk @deployArgs
 $deployExitCode = $LASTEXITCODE
 

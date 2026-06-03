@@ -3,6 +3,7 @@
 *.env.local
 service-account.json
 *-service-account.json
+frontend/.env.cloudrun.yaml
 
 # Python
 __pycache__/

@@ -18,14 +18,23 @@ export default async function ChatPage({ params, searchParams }: Props) {
   const { id } = await params
   const { reset } = await searchParams
 
+  // Demo clients are public — no login required
+  const mockClient = mockClients.find((c) => c.id === id)
+  if (mockClient?.isDemo) {
+    return (
+      <ChatClient
+        client={mockClient}
+        initialMessages={mockClient.demoConversation ?? []}
+        readOnly
+      />
+    )
+  }
+
   const cookieStore = await cookies()
   const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
   if (!session.isLoggedIn) redirect("/")
 
-  // Resolve client: mock first, then session-stored
-  const mockClient = mockClients.find((c) => c.id === id)
   const storedClient = (session.createdClients ?? []).find((c) => c.id === id)
-
   const client: Client | undefined = mockClient ?? (storedClient
     ? {
         id: storedClient.id,
@@ -39,17 +48,6 @@ export default async function ChatPage({ params, searchParams }: Props) {
 
   if (!client) notFound()
 
-  // Demo clients: serve hardcoded conversation, read-only
-  if (client.isDemo) {
-    return (
-      <ChatClient
-        client={client}
-        initialMessages={client.demoConversation ?? []}
-        readOnly
-      />
-    )
-  }
-
   // Live client: real ADK session
   if (reset === "true") {
     await deleteAdkSession(session.userEmail, id)
@@ -61,6 +59,8 @@ export default async function ChatPage({ params, searchParams }: Props) {
 }
 
 async function deleteAdkSession(userEmail: string | undefined, clientId: string) {
+  if (process.env.AGENT_MODE === "production") return
+
   const adkUrl = process.env.AGENT_DEV_SERVER_URL ?? "http://127.0.0.1:8000"
   const userId = (userEmail ?? "local_dev_user").replace(/[^a-zA-Z0-9_]/g, "_")
   const sessionId = `grapez_${clientId}`
@@ -68,6 +68,7 @@ async function deleteAdkSession(userEmail: string | undefined, clientId: string)
   try {
     await fetch(`${adkUrl}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`, {
       method: "DELETE",
+      signal: AbortSignal.timeout(3000),
     })
   } catch {
     // ADK server may not be running — session will be recreated on first message
@@ -78,6 +79,8 @@ async function loadSessionHistory(
   userEmail: string | undefined,
   clientId: string
 ): Promise<ChatMessage[]> {
+  if (process.env.AGENT_MODE === "production") return []
+
   const adkUrl = process.env.AGENT_DEV_SERVER_URL ?? "http://127.0.0.1:8000"
   const userId = (userEmail ?? "local_dev_user").replace(/[^a-zA-Z0-9_]/g, "_")
   const sessionId = `grapez_${clientId}`
@@ -85,7 +88,7 @@ async function loadSessionHistory(
   try {
     const res = await fetch(
       `${adkUrl}/apps/${APP_NAME}/users/${userId}/sessions/${sessionId}`,
-      { cache: "no-store" }
+      { cache: "no-store", signal: AbortSignal.timeout(3000) }
     )
     if (!res.ok) return []
 

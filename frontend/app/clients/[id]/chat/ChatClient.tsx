@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ChatMessage, Client } from "@/lib/types"
 import { A2UIRenderer, parseA2UI } from "@/components/a2ui/A2UIRenderer"
 import { renderMarkdown } from "@/lib/render-markdown"
@@ -13,6 +14,7 @@ interface ChatClientProps {
 }
 
 export function ChatClient({ client, initialMessages = [], readOnly = false }: ChatClientProps) {
+  const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -122,8 +124,8 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
       {/* Header */}
       <div className="border-b border-gdark bg-gdark/90 backdrop-blur-md px-6 py-3 flex items-center justify-between gap-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/"
+          <button
+            onClick={() => { router.push("/"); router.refresh() }}
             className="text-ggray3 hover:text-white transition-colors shrink-0 flex items-center gap-1.5"
             aria-label="Volver al inicio"
           >
@@ -141,7 +143,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             <span className="text-xs hidden sm:inline">Inicio</span>
-          </Link>
+          </button>
           <span className="text-ggray3/30 text-sm shrink-0">|</span>
           <div className="min-w-0">
             <h2 className="font-semibold text-white text-sm truncate">{client.name}</h2>
