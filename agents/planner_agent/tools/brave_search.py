@@ -5,18 +5,15 @@ from google.adk.tools import ToolContext
 
 def _get_identity_token(audience: str) -> str | None:
     """
-    Obtiene un Google identity token del metadata server.
-    Solo funciona en Agent Runtime / Cloud Run — no en desarrollo local.
+    Obtiene un Google OIDC identity token para autenticar Cloud Run.
+    Usa google-auth que funciona en Agent Runtime, Cloud Run y desarrollo local con ADC.
     """
     try:
-        response = httpx.get(
-            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
-            params={"audience": audience},
-            headers={"Metadata-Flavor": "Google"},
-            timeout=5,
-        )
-        if response.status_code == 200:
-            return response.text.strip()
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+
+        auth_req = google.auth.transport.requests.Request()
+        return google.oauth2.id_token.fetch_id_token(auth_req, audience)
     except Exception:
         pass
     return None

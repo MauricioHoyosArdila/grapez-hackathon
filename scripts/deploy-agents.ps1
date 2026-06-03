@@ -9,6 +9,24 @@
 #   - .env configurado con GOOGLE_CLOUD_PROJECT y GOOGLE_CLOUD_LOCATION
 #   - gcloud autenticado con la cuenta correcta
 #
+# Variables incluidas en el deploy (leídas de .env):
+#   BRAVE_API_KEY       — fallback directo a Brave API si MCP falla
+#   BRAVE_MCP_URL       — URL del Brave MCP Server en Cloud Run
+#   GOOGLE_CLIENT_ID    — OAuth del cliente
+#   GOOGLE_CLIENT_SECRET
+#   GOOGLE_GENAI_USE_VERTEXAI — fuerza uso de Vertex AI (no API key directa)
+#   GOOGLE_CLOUD_LOCATION
+#
+# Variables EXCLUIDAS (frontend/dev/infra, no necesarias en Agent Runtime):
+#   SESSION_SECRET, ENCRYPTION_KEY, NEXT_PUBLIC_*, OAUTH_REDIRECT_URI,
+#   TEST_*, FIRESTORE_DATABASE, PLANNER_AGENT_ENGINE_ID, AGENT_ENGINE_*,
+#   DEMO_*, GOOGLE_GEMINI_API_KEY
+#
+# Si agregas una nueva variable al agente:
+#   1. Agrégala a .env
+#   2. Verifica que NO esté en $excludePrefix abajo
+#   3. Corre este script con -UpdateExisting
+#
 # Por qué existe este script:
 #   ADK deploy agent_engine en Windows copia .git al temp folder y falla al limpiarlo
 #   porque los objetos de git son read-only. Este script crea un paquete limpio sin

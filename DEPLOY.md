@@ -38,7 +38,23 @@
 
 **Tiempo:** ~5-10 minutos
 
-**Variables que llegan al Agent Runtime** (verificar con):
+**Variables que llegan al Agent Runtime** (leídas de `.env`, lista completa en el header del script):
+
+| Variable | Para qué |
+|---|---|
+| `BRAVE_API_KEY` | Fallback directo a Brave API si el MCP server falla |
+| `BRAVE_MCP_URL` | URL del Brave MCP Server en Cloud Run |
+| `GOOGLE_CLIENT_ID` | Para construir credenciales OAuth en los agentes |
+| `GOOGLE_CLIENT_SECRET` | Para construir credenciales OAuth en los agentes |
+| `GOOGLE_GENAI_USE_VERTEXAI` | Fuerza uso de Vertex AI (no API key directa) |
+| `GOOGLE_CLOUD_LOCATION` | `us-central1` |
+
+> **Si agregas una nueva variable a un agente:**
+> 1. Agrégala a `.env`
+> 2. Verifica que NO esté en `$excludePrefix` dentro del script
+> 3. Corre `.\scripts\deploy-agents.ps1 -UpdateExisting`
+
+**Verificar variables en Agent Runtime:**
 ```powershell
 $token = gcloud auth print-access-token
 Invoke-RestMethod -Uri "https://us-central1-aiplatform.googleapis.com/v1beta1/projects/grapez-ecosistema-medicion/locations/us-central1/reasoningEngines/4586839804418719744" -Headers @{Authorization = "Bearer $token"} | Select-Object -ExpandProperty spec | Select-Object -ExpandProperty deploymentSpec | Select-Object -ExpandProperty env
@@ -49,19 +65,33 @@ Invoke-RestMethod -Uri "https://us-central1-aiplatform.googleapis.com/v1beta1/pr
 ## 2. Deploy del Frontend (Cloud Run)
 
 ```powershell
-cd frontend
-
-gcloud run deploy grapez-frontend `
-  --source . `
-  --region us-central1 `
-  --project grapez-ecosistema-medicion `
-  --allow-unauthenticated `
-  --env-vars-file .env.cloudrun.yaml
+.\scripts\deploy-frontend.ps1
 ```
 
 **Tiempo:** ~5-8 minutos (Buildpacks detecta Next.js automáticamente)
 
-**Variables de entorno:** definidas en `frontend/.env.cloudrun.yaml` (no commitear con secretos reales — el archivo actual tiene referencias a Secret Manager o valores de entorno).
+**Qué hace el script:**
+1. Lee todas las variables de `frontend/.env.cloudrun.yaml` y las pasa con `--env-vars-file`
+2. Ejecuta `gcloud run deploy grapez-frontend --source frontend/`
+
+**Variables que llegan al frontend** (definidas en `frontend/.env.cloudrun.yaml`):
+
+| Variable | Para qué |
+|---|---|
+| `AGENT_MODE` | `"production"` — usa Agent Runtime en vez de dev server local |
+| `PLANNER_AGENT_ENGINE_ID` | ID del agente en Vertex AI |
+| `AGENT_ENGINE_REGION` | `us-central1` |
+| `AGENT_ENGINE_PROJECT` | `grapez-ecosistema-medicion` |
+| `SESSION_SECRET` | Cifrado de la cookie iron-session (mín. 32 chars) |
+| `GOOGLE_CLIENT_ID` | OAuth — ID del cliente |
+| `GOOGLE_CLIENT_SECRET` | OAuth — secreto del cliente |
+| `OAUTH_REDIRECT_URI` | `https://grapez-frontend-*.run.app/api/oauth/google/callback` |
+| `NEXT_PUBLIC_APP_URL` | URL pública del frontend |
+
+> **Si agregas una nueva variable al frontend:**
+> 1. Agrégala a `frontend/.env.local` (para desarrollo local)
+> 2. Agrégala a `frontend/.env.cloudrun.yaml` (para producción)
+> 3. Corre `.\scripts\deploy-frontend.ps1` para que llegue a Cloud Run
 
 ---
 
@@ -141,7 +171,8 @@ gcloud logging read "resource.type=cloud_run_revision AND resource.labels.servic
 |---|---|---|
 | Agent Runtime retorna body vacío (len=0) | Sesión no creada o endpoint `v1` en vez de `v1beta1` | Verificar URL usa `/v1beta1/` y sesión se crea antes de `streamQuery` |
 | `asyncio.run() cannot be called from a running event loop` | Llamar `asyncio.run()` dentro de coroutine ADK | Usar `async def` + `await` o `run_in_executor` |
-| `unhandled errors in a TaskGroup` | `anyio.TaskGroup` de MCP en conflicto con event loop de ADK | Usar `loop.run_in_executor(None, _run_mcp_in_thread, ...)` |
+| `unhandled errors in a TaskGroup` + `BRAVE_API_KEY no configurada` | MCP server no puede autenticar (identitytoken falla) Y `BRAVE_API_KEY` no deployada como fallback | `_get_identity_token` usa `google.oauth2.id_token.fetch_id_token`; redeploy agente incluye `BRAVE_API_KEY` |
+| `unhandled errors in a TaskGroup` (MCP solo) | `anyio.TaskGroup` de MCP en conflicto con event loop de ADK | Usar `loop.run_in_executor(None, _run_mcp_in_thread, ...)` |
 | MCP server retorna `421 Misdirected Request` | FastMCP rechaza el Host header de Cloud Run | `_CloudRunHostMiddleware` reescribe Host a `localhost:{PORT}` |
 | `'ascii' codec can't encode '﻿'` | BRAVE_API_KEY guardada con UTF-8 BOM de PowerShell | Re-crear secreto con `UTF8Encoding(false)` (ver sección 4) |
 | `MALFORMED_FUNCTION_CALL: display_a2ui_card()` | Gemini inventa función para A2UI en vez de emitir JSON | Agregar regla explícita en instruction: "A2UI son texto plano, no funciones" |
