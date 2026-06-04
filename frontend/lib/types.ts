@@ -82,7 +82,8 @@ export interface A2UIImageCard {
   __a2ui: true
   type: "image_card"
   title: string
-  image_base64: string
+  image_url?: string
+  image_base64?: string
   caption?: string
   elements?: Array<{ label: string; selector: string }>
 }

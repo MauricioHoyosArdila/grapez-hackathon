@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { ChatMessage, Client } from "@/lib/types"
 import { A2UIRenderer, parseA2UI } from "@/components/a2ui/A2UIRenderer"
 import { renderMarkdown } from "@/lib/render-markdown"
+import { ConversationStarters } from "@/components/chat/ConversationStarters"
 
 interface ChatClientProps {
   client: Client
@@ -20,24 +21,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
   const [loading, setLoading] = useState(false)
   const [resetting, setResetting] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const autoSentRef = useRef(false)
-
-  // Auto-send first message with client context when chat opens fresh
-  useEffect(() => {
-    if (readOnly || initialMessages.length > 0 || autoSentRef.current) return
-    autoSentRef.current = true
-    const modoLabel = client.modo === "auditoria_implementacion"
-      ? "Auditoría + implementación"
-      : "Solo auditoría"
-    const firstMessage = [
-      `Nuevo análisis para: ${client.name}`,
-      `Sitio web: ${client.websiteUrl}`,
-      `Modelo de negocio: ${client.industry}`,
-      `Modo: ${modoLabel}`,
-    ].join("\n")
-    submitMessage(firstMessage)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -214,10 +198,12 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
 
       {/* Mensajes */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5 bg-gblack">
-        {messages.length === 0 && (
-          <div className="text-center py-16 text-ggray3 text-sm">
-            Escribe un mensaje para iniciar el diagnóstico del ecosistema.
-          </div>
+        {messages.length === 0 && !readOnly && (
+          <ConversationStarters
+            client={client}
+            onSelect={(msg) => submitMessage(msg)}
+            onFocusInput={() => inputRef.current?.focus()}
+          />
         )}
         {messages.map((msg) => (
           <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}>
@@ -282,6 +268,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
         >
           <div className="flex gap-3 max-w-3xl mx-auto">
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}

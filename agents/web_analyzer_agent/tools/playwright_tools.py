@@ -8,7 +8,7 @@ PLAYWRIGHT_SERVICE_URL = os.environ.get("PLAYWRIGHT_SERVICE_URL", "http://localh
 def screenshot_site(url: str, tool_context: ToolContext) -> dict:
     """Toma screenshot del sitio web y extrae todos los elementos interactivos (botones, forms, links).
     Usar cuando el consultor no conoce un CTA específico o quiere confirmar visualmente qué botones existen.
-    Devuelve screenshot_base64 (PNG en base64) + interactive_elements (lista de botones/forms detectados).
+    Devuelve screenshot_url (URL pública de la imagen PNG) + interactive_elements (lista de botones/forms detectados).
     """
     try:
         resp = httpx.post(
@@ -27,6 +27,37 @@ def screenshot_site(url: str, tool_context: ToolContext) -> dict:
     except Exception as e:
         return {
             "error": str(e),
+            "crawl_method": "error",
+        }
+
+
+def crawl_site(url: str, tool_context: ToolContext) -> dict:
+    """Navega el sitio web: home + páginas internas más relevantes (máx 6).
+    Prioriza páginas con señales de conversión (formularios, CTAs, pricing, contacto).
+    Devuelve site_map con título/URL/score/CTAs de cada página, y screenshots completos.
+    Usar en FASE 1 para construir el mapa conceptual antes de hablar con el consultor.
+    """
+    try:
+        resp = httpx.post(
+            f"{PLAYWRIGHT_SERVICE_URL}/crawl_site",
+            json={"url": url, "max_pages": 6},
+            timeout=120.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.ConnectError:
+        return {
+            "error": "Playwright Service no disponible",
+            "detail": f"No se pudo conectar a {PLAYWRIGHT_SERVICE_URL}.",
+            "site_map": [],
+            "pages": [],
+            "crawl_method": "error",
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "site_map": [],
+            "pages": [],
             "crawl_method": "error",
         }
 

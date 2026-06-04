@@ -1,59 +1,78 @@
 import React from "react"
 
 export function renderMarkdown(text: string): React.ReactNode {
-  if (!text) return null
-
   const lines = text.split("\n")
-  const nodes: React.ReactNode[] = []
+  const result: React.ReactNode[] = []
+  let i = 0
+  let k = 0
 
-  for (let i = 0; i < lines.length; i++) {
+  while (i < lines.length) {
     const line = lines[i]
 
-    if (line === "") {
-      nodes.push(<br key={`br-${i}`} />)
+    // Ordered list block
+    if (/^\d+\.\s/.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\.\s/, ""))
+        i++
+      }
+      result.push(
+        <ol key={k++} className="list-decimal list-inside space-y-1 my-1">
+          {items.map((item, j) => (
+            <li key={j} className="text-sm">{inlineMarkdown(item)}</li>
+          ))}
+        </ol>
+      )
       continue
     }
 
-    nodes.push(
-      <span key={`line-${i}`}>
-        {parseLine(line)}
-        {i < lines.length - 1 && line !== "" ? " " : null}
+    // Unordered list block
+    if (/^[-*]\s/.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^[-*]\s/, ""))
+        i++
+      }
+      result.push(
+        <ul key={k++} className="list-disc list-inside space-y-1 my-1">
+          {items.map((item, j) => (
+            <li key={j} className="text-sm">{inlineMarkdown(item)}</li>
+          ))}
+        </ul>
+      )
+      continue
+    }
+
+    // Empty line → spacing
+    if (line.trim() === "") {
+      result.push(<br key={k++} />)
+      i++
+      continue
+    }
+
+    // Normal line
+    result.push(
+      <span key={k++}>
+        {inlineMarkdown(line)}
+        {i < lines.length - 1 && lines[i + 1]?.trim() !== "" && <br />}
       </span>
     )
+    i++
   }
 
-  return <>{nodes}</>
+  return <>{result}</>
 }
 
-function parseLine(line: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = []
-  // Match **bold**, `code`, or plain text segments
-  const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = pattern.exec(line)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(line.slice(lastIndex, match.index))
+function inlineMarkdown(text: string): React.ReactNode {
+  // Split on **bold**, *italic* patterns
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>
     }
-
-    const token = match[0]
-    if (token.startsWith("**")) {
-      parts.push(<strong key={match.index}>{token.slice(2, -2)}</strong>)
-    } else if (token.startsWith("`")) {
-      parts.push(
-        <code key={match.index} className="bg-black/10 rounded px-1 font-mono text-xs">
-          {token.slice(1, -1)}
-        </code>
-      )
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return <em key={i}>{part.slice(1, -1)}</em>
     }
-
-    lastIndex = match.index + token.length
-  }
-
-  if (lastIndex < line.length) {
-    parts.push(line.slice(lastIndex))
-  }
-
-  return parts
+    return part
+  })
 }

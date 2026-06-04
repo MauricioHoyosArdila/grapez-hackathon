@@ -3,6 +3,7 @@ import { getIronSession } from "iron-session"
 import { cookies } from "next/headers"
 import { SessionData, sessionOptions } from "@/lib/session"
 import { mockClients } from "@/lib/mock-clients"
+import { DeleteClientButton } from "@/components/home/DeleteClientButton"
 
 export default async function HomePage() {
   const cookieStore = await cookies()
@@ -103,6 +104,7 @@ export default async function HomePage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs text-ggray3 hidden sm:block">{client.industry}</span>
+                      <DeleteClientButton clientId={client.id} />
                       <Link
                         href={`/clients/${client.id}/chat?reset=true`}
                         className="text-xs border border-gdark px-3 py-1.5 rounded-lg text-ggray2 hover:border-ggray3 hover:text-white transition-colors whitespace-nowrap"
