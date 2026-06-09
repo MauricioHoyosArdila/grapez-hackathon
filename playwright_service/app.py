@@ -101,7 +101,7 @@ async def _extract_elements(page: Page) -> list:
             seen.add(e.label)
             return true
         }).slice(0, 30)
-    """)
+    }""")
 
 
 @app.get("/health")
