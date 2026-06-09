@@ -50,6 +50,18 @@ export function renderMarkdown(text: string): React.ReactNode {
       continue
     }
 
+    // Header (## Título) — bold blanco, sin tipografías gigantes en el chat
+    const headerMatch = line.match(/^#{1,6}\s+(.*)$/)
+    if (headerMatch) {
+      result.push(
+        <p key={k++} className="font-bold text-white text-sm mt-2 mb-1">
+          {inlineMarkdown(headerMatch[1])}
+        </p>
+      )
+      i++
+      continue
+    }
+
     // Normal line
     result.push(
       <span key={k++}>
@@ -63,10 +75,36 @@ export function renderMarkdown(text: string): React.ReactNode {
   return <>{result}</>
 }
 
+// Solo esquemas seguros — cualquier otro (javascript:, data:, etc.) se muestra como texto
+function isSafeHref(href: string): boolean {
+  return (
+    href.startsWith("https://") ||
+    href.startsWith("http://") ||
+    href.startsWith("/") ||
+    href.startsWith("mailto:")
+  )
+}
+
 function inlineMarkdown(text: string): React.ReactNode {
-  // Split on **bold**, *italic* patterns
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g)
+  // Split on [link](url), **bold**, *italic* patterns — el link va primero en la alternancia
+  const parts = text.split(/(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*)/g)
   return parts.map((part, i) => {
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (linkMatch) {
+      const [, label, href] = linkMatch
+      if (!isSafeHref(href)) return part
+      const isExternal = href.startsWith("http")
+      return (
+        <a
+          key={i}
+          href={href}
+          {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+          className="text-glime underline underline-offset-2 hover:text-[#c8f070] transition-colors"
+        >
+          {label}
+        </a>
+      )
+    }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i}>{part.slice(2, -2)}</strong>
     }

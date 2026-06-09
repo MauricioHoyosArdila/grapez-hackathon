@@ -35,7 +35,7 @@ def crawl_site(url: str, tool_context: ToolContext) -> dict:
     """Navega el sitio web: home + páginas internas más relevantes (máx 6).
     Prioriza páginas con señales de conversión (formularios, CTAs, pricing, contacto).
     Devuelve site_map con título/URL/score/CTAs de cada página, y screenshots completos.
-    Usar en FASE 1 para construir el mapa conceptual antes de hablar con el consultor.
+    Usar en la investigación previa (sub-paso 1a) para construir el mapa conceptual antes de hablar con el consultor.
     """
     try:
         resp = httpx.post(

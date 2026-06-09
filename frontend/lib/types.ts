@@ -15,6 +15,7 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   components?: A2UIComponent[]
+  imageUrl?: string
   timestamp: Date
 }
 

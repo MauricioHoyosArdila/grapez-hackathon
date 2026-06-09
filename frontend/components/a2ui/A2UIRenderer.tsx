@@ -10,8 +10,8 @@ import { ImageCard } from "./ImageCard"
 
 interface A2UIRendererProps {
   component: A2UIComponent
-  onConfirm?: (actionId: string) => void
-  onCancel?: (actionId: string) => void
+  onConfirm?: (actionId: string, title: string) => void
+  onCancel?: (actionId: string, title: string) => void
   onChoice?: (label: string) => void
 }
 

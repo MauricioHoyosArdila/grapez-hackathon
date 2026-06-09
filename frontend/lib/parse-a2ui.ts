@@ -27,6 +27,45 @@ export function parseA2UI(text: string): { text?: string; components: A2UICompon
   return { text: cleanText || undefined, components }
 }
 
+// Recorta del final del texto cualquier bloque A2UI incompleto, para no mostrar
+// JSON crudo mientras el stream todavía está escribiendo el componente.
+// Solo afecta la visualización durante el streaming — el parse final usa el texto completo.
+export function stripIncompleteA2UI(text: string): string {
+  // 1. Bloque ```json sin cierre: cortar desde el último ```json sin ``` de cierre
+  const lastFence = text.lastIndexOf("```json")
+  if (lastFence !== -1 && !text.slice(lastFence + 7).includes("```")) {
+    return text.slice(0, lastFence)
+  }
+
+  // 2. JSON inline {"__a2ui" con llaves sin balancear al final: cortar desde ahí
+  const lastInline = text.lastIndexOf('{"__a2ui"')
+  if (lastInline !== -1 && !isBalancedJson(text.slice(lastInline))) {
+    return text.slice(0, lastInline)
+  }
+
+  return text
+}
+
+// Conteo de llaves con manejo de strings/escapes — mismo patrón que extractInlineA2UI
+function isBalancedJson(text: string): boolean {
+  let depth = 0
+  let inStr = false
+  let esc = false
+
+  for (const ch of text) {
+    if (esc) { esc = false; continue }
+    if (ch === "\\" && inStr) { esc = true; continue }
+    if (ch === '"') { inStr = !inStr; continue }
+    if (inStr) continue
+    if (ch === "{") depth++
+    else if (ch === "}") {
+      depth--
+      if (depth === 0) return true
+    }
+  }
+  return false
+}
+
 function extractInlineA2UI(
   text: string
 ): { found: A2UIComponent[]; cleanText: string } {

@@ -25,7 +25,7 @@ def load_client_tokens(
         tool_context.state["token_expiry"] = token_expiry
     return {
         "status": "tokens_loaded",
-        "message": "Tokens OAuth cargados. Listo para diagnosticar.",
+        "message": "Conexión con la cuenta de Google lista. Puedes empezar a revisar las cuentas del cliente.",
     }
 
 
@@ -41,9 +41,9 @@ def get_session_info(tool_context: ToolContext) -> dict:
         "refresh_token_present": has_refresh,
         "ready_to_diagnose": has_access and has_refresh,
         "message": (
-            "Sesión lista — tokens cargados correctamente."
+            "Conexión con Google activa — todo listo para empezar."
             if (has_access and has_refresh)
-            else "Tokens no encontrados. El cliente debe autenticarse o proveer los tokens."
+            else "No hay conexión con la cuenta de Google. Pide al consultor reconectar su cuenta antes de continuar."
         ),
     }
 
@@ -64,7 +64,7 @@ def confirm_action(action_description: str, tool_context: ToolContext) -> dict:
     return {
         "confirmed": True,
         "action": action_description,
-        "message": "Confirmación registrada. Procediendo con la implementación.",
+        "message": f"Aprobación registrada para: {action_description}. Aplica solo este cambio y reporta el resultado en lenguaje de negocio.",
     }
 
 
@@ -127,7 +127,7 @@ def set_business_context(
         "business_type": business_type.lower(),
         "website_url": website_url,
         "key_conversions": normalized_conversions,
-        "message": "Contexto del negocio guardado. URL lista para Web Analyzer.",
+        "message": "Contexto del negocio guardado. Continúa con el siguiente paso de la conversación.",
     }
 
 
@@ -148,7 +148,7 @@ def set_audit_mode(mode: str, tool_context: ToolContext) -> dict:
     label = "Solo auditoría" if mode.lower() == "auditoria" else "Auditoría + implementación"
     return {
         "audit_mode": mode.lower(),
-        "message": f"Modo '{label}' activado.",
+        "message": f"Modo '{label}' registrado. Cierra este paso y anuncia el siguiente al consultor.",
     }
 
 
@@ -164,7 +164,7 @@ def save_ga4_findings(findings: str, tool_context: ToolContext) -> dict:
     tool_context.state["ga4_findings"] = findings
     return {
         "saved": True,
-        "message": "Hallazgos GA4 guardados. GTM Agent los leerá via get_ga4_findings_from_state().",
+        "message": "Hallazgos de Analytics guardados para el cruce con Tag Manager. Continúa con el diagnóstico GTM — no menciones este paso interno al consultor.",
     }
 
 
@@ -179,5 +179,5 @@ def save_ideal_spec(ideal_spec: dict, tool_context: ToolContext) -> dict:
     tool_context.state["ideal_spec"] = ideal_spec
     return {
         "saved": True,
-        "message": "Ideal spec guardado en sesión. GA4 y GTM lo usarán para el gap analysis.",
+        "message": "Configuración ideal guardada. Continúa con el diagnóstico — no menciones este paso interno al consultor.",
     }

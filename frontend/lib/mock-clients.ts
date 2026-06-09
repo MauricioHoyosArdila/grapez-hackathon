@@ -13,16 +13,16 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
     id: "td-2",
     role: "assistant",
     content:
-      "¡Hola! Soy el agente de analytics de **Grapez Studio**. Voy a analizar el ecosistema de medición de **Tienda Demo**.\n\nHe investigado tiendademo.vercel.app: e-commerce de moda con checkout propio. Conversiones clave detectadas: compra completada, inicio de checkout, agregar al carrito.\n\n¿Con qué alcance quieres proceder?",
+      "**Paso 1 de 5 — Conocer tu negocio**\n\nSoy tu consultor de medición de Grapez Studio. Vamos a trabajar en 5 pasos: primero entiendo tu negocio, decidimos cómo trabajar, reviso tu medición, te muestro resultados y aplicamos mejoras.\n\nAntes de escribirte ya revisé tiendademo.vercel.app: tienda de moda con pago en el mismo sitio. Las acciones que más valen para ti: compra completada, inicio de pago y agregar al carrito. Ahora dime cómo quieres trabajar:",
     components: [
       {
         __a2ui: true,
         type: "choice_card",
-        title: "Selecciona el alcance del trabajo",
-        description: "Define si el agente solo auditará o también implementará los cambios.",
+        title: "¿Cómo quieres trabajar hoy?",
+        description: "Las dos opciones incluyen el diagnóstico completo — la diferencia es si aplico los arreglos.",
         choices: [
-          { id: "audit", label: "Solo auditoría", description: "Diagnóstico completo sin modificar ninguna configuración." },
-          { id: "impl", label: "Auditoría + implementación", description: "Diagnóstico + ejecución de cambios con tu aprobación en cada paso." },
+          { id: "audit", label: "Solo diagnóstico (~5 min)", description: "Reviso tu Google Analytics, tus medidores (GTM) y el sitio, y te entrego un informe claro: qué funciona, qué no, y qué arreglaría yo primero. No toco ninguna configuración." },
+          { id: "impl", label: "Diagnóstico + arreglos (~10-15 min)", description: "Lo mismo que A, y además aplico las correcciones una por una — solo las que tú apruebes con un clic. Puedes parar cuando quieras; lo no aprobado queda anotado como pendiente." },
         ],
       },
     ],
@@ -31,22 +31,22 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
   {
     id: "td-3",
     role: "user",
-    content: "Auditoría + implementación",
+    content: "Diagnóstico + arreglos (~10-15 min)",
     timestamp: new Date("2026-05-10T10:00:30"),
   },
   {
     id: "td-4",
     role: "assistant",
     content:
-      "Perfecto. Iniciando diagnóstico con alcance de **auditoría e implementación**. Conectando con GA4 y GTM de Tienda Demo...",
+      "**Paso 3 de 5 — Revisar tu medición**\n\nPerfecto. Voy a revisar tu Google Analytics y tus medidores (Google Tag Manager): comparo lo que tu tienda DEBERÍA medir con lo que realmente está configurado. Tardo 1-2 minutos — no necesitas hacer nada.",
     components: [
       {
         __a2ui: true,
         type: "progress",
-        title: "Analizando ecosistema",
+        title: "Paso 3 de 5 — Revisando tu medición",
         current: 1,
-        total: 4,
-        current_step: "Consultando Google Analytics 4 — propiedad Tienda Demo (GA4-320491823)",
+        total: 3,
+        current_step: "Revisando Google Analytics: qué datos de tus clientes están llegando (GA4-320491823)",
       },
     ],
     timestamp: new Date("2026-05-10T10:00:35"),
@@ -54,20 +54,21 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
   {
     id: "td-5",
     role: "assistant",
-    content: "**Diagnóstico GA4 completado.** He analizado la propiedad principal:",
+    content:
+      "**Paso 4 de 5 — Resultados: qué funciona y qué no**\n\nLo más importante: hoy tus ventas no cuentan como conversiones en Google Analytics — no sabes qué campañas generan dinero. Encontré 3 problemas críticos y 2 mejorables. La buena noticia: la medición automática de Google (Enhanced Measurement) está bien instalada.",
     components: [
       {
         __a2ui: true,
         type: "table",
-        title: "GA4 — Tienda Demo (GA4-320491823)",
-        columns: ["Área", "Estado", "Hallazgo", "Prioridad"],
+        title: "Resultados — Tienda Demo (GA4-320491823)",
+        columns: ["Área", "Estado", "Qué significa", "Prioridad"],
         rows: [
-          ["Conversiones", "❌", "No hay ningún evento marcado como conversión", "Alta"],
-          ["Retención de datos", "⚠️", "Configurada en 2 meses — se pierde historial comparativo", "Media"],
-          ["Dimensiones custom", "❌", "Sin dimensiones personalizadas (tipo de cliente, canal)", "Alta"],
-          ["Enhanced Measurement", "✅", "Activado correctamente — clicks, scroll, video", "—"],
-          ["Consent Mode v2", "⚠️", "Implementado parcialmente — falta default 'denied'", "Media"],
-          ["Filtro tráfico interno", "❌", "No hay filtro — accesos del equipo contaminan datos", "Alta"],
+          ["Ventas — Conversiones", "❌", "Ninguna compra cuenta como conversión — no puedes optimizar campañas hacia ventas reales", "Alta"],
+          ["Ventas — Segmentación de clientes", "❌", "No distingues clientes nuevos de recurrentes (sin custom dimensions) — todas tus decisiones son a ciegas", "Alta"],
+          ["Calidad de datos — Tráfico interno", "❌", "Las visitas de tu propio equipo inflan tus números — no hay filtro", "Alta"],
+          ["Calidad de datos — Aviso de cookies", "⚠️", "El aviso de cookies (Consent Mode) está a medias — Google puede descartar parte de tus datos", "Media"],
+          ["Configuración — Historial", "⚠️", "Google solo guarda 2 meses de historial (retención de datos) — no podrás comparar este Black Friday con el anterior", "Media"],
+          ["Configuración — Medición automática", "✅", "Clics, scroll y videos se miden solos (Enhanced Measurement)", "—"],
         ],
       },
     ],
@@ -76,14 +77,14 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
   {
     id: "td-6",
     role: "assistant",
-    content: "Basado en el diagnóstico, propongo **3 acciones** ordenadas por impacto en negocio. Confirma cada una para ejecutarla:",
+    content: "Propongo **3 arreglos**, ordenados por lo que más afecta tus ventas. Apruebas uno por uno — el que omitas queda anotado como pendiente:",
     components: [
       {
         __a2ui: true,
         type: "action_card",
-        title: "Crear conversión 'purchase' en GA4",
+        title: "Registrar cada compra como conversión",
         description:
-          "Se marcará el evento 'purchase' como conversión en GA4-320491823. Sin esto, no puedes optimizar campañas hacia compras reales. Esta acción es reversible desde la UI de GA4.",
+          "Marco el evento 'purchase' como conversión en tu cuenta (GA4-320491823). Qué ganas: desde hoy sabrás qué campañas generan ventas reales. Es reversible en cualquier momento.",
         impact: "high",
         requires_confirmation: true,
         action_id: "create_conversion_purchase",
@@ -91,9 +92,9 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
       {
         __a2ui: true,
         type: "action_card",
-        title: "Actualizar retención de datos a 14 meses",
+        title: "Guardar 14 meses de historial en vez de 2",
         description:
-          "Se cambiará la retención de 2 meses a 14 meses. Esto permite comparar temporadas completas (Black Friday 2025 vs 2026) y analizar ciclo de vida de clientes.",
+          "Amplío la retención de datos de 2 a 14 meses. Qué ganas: podrás comparar temporadas completas (Black Friday 2025 vs 2026) y entender cuánto tarda un cliente en volver a comprar.",
         impact: "medium",
         requires_confirmation: true,
         action_id: "update_data_retention",
@@ -101,9 +102,9 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
       {
         __a2ui: true,
         type: "action_card",
-        title: "Crear dimensión custom 'tipo_cliente'",
+        title: "Etiquetar clientes: nuevo, recurrente o VIP",
         description:
-          "Se creará la dimensión de evento 'tipo_cliente' (nuevo / recurrente / VIP) para segmentar el comportamiento de compra por tipo de usuario.",
+          "Creo la etiqueta 'tipo_cliente' (custom dimension) en tu cuenta. Qué ganas: ver qué compra cada tipo de cliente y dirigir tus campañas al que más vale.",
         impact: "medium",
         requires_confirmation: true,
         action_id: "create_dimension_tipo_cliente",
@@ -114,7 +115,7 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
   {
     id: "td-7",
     role: "user",
-    content: "Confirmo: create_conversion_purchase",
+    content: "Confirmo: Registrar cada compra como conversión",
     timestamp: new Date("2026-05-10T10:02:10"),
   },
   {
@@ -128,7 +129,7 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
         title: "Implementando cambios",
         current: 1,
         total: 3,
-        current_step: "✅ Conversión 'purchase' creada — GA4-320491823",
+        current_step: "✅ Listo — desde hoy cada compra cuenta como conversión (GA4-320491823)",
       },
     ],
     timestamp: new Date("2026-05-10T10:02:15"),
@@ -136,7 +137,7 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
   {
     id: "td-9",
     role: "user",
-    content: "Confirmo: update_data_retention",
+    content: "Confirmo: Guardar 14 meses de historial en vez de 2",
     timestamp: new Date("2026-05-10T10:02:30"),
   },
   {
@@ -150,7 +151,7 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
         title: "Implementando cambios",
         current: 2,
         total: 3,
-        current_step: "✅ Retención actualizada a 14 meses — GA4-320491823",
+        current_step: "✅ Listo — Google ahora guarda 14 meses de tu historial (GA4-320491823)",
       },
     ],
     timestamp: new Date("2026-05-10T10:02:35"),
@@ -158,13 +159,13 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
   {
     id: "td-11",
     role: "user",
-    content: "Confirmo: create_dimension_tipo_cliente",
+    content: "Confirmo: Etiquetar clientes: nuevo, recurrente o VIP",
     timestamp: new Date("2026-05-10T10:02:50"),
   },
   {
     id: "td-12",
     role: "assistant",
-    content: "✅ Los 3 cambios se aplicaron correctamente. Aquí el reporte final:",
+    content: "**Paso 5 de 5 — Resumen final**\n\nLos 3 cambios quedaron aplicados. Esto es lo que cambia para ti desde hoy:",
     components: [
       {
         __a2ui: true,
@@ -178,16 +179,16 @@ const tiendaDemoConversation: NonNullable<Client["demoConversation"]> = [
           acciones_implementadas: 3,
         },
         top_wins: [
-          "Conversión 'purchase' activa — GA4 reporta ventas reales",
-          "Retención de 14 meses — comparación histórica disponible",
-          "Dimensión 'tipo_cliente' creada para segmentación avanzada",
+          "Cada compra ya cuenta como conversión — sabrás qué campañas generan ventas reales",
+          "Google guarda 14 meses de historial — podrás comparar temporadas completas",
+          "Clientes etiquetados (nuevo / recurrente / VIP) — campañas dirigidas al que más vale",
         ],
         pending_actions: [
-          "Configurar filtro de tráfico interno (IP del equipo)",
-          "Completar Consent Mode v2 con valor default 'denied'",
+          "Filtrar las visitas de tu propio equipo — hoy inflan tus números",
+          "Completar el aviso de cookies (Consent Mode) — Google puede descartar parte de tus datos",
         ],
         next_steps:
-          "Monitorear DebugView en GA4 durante 48h para confirmar que 'purchase' llega con los parámetros value, currency e items correctos.",
+          "En 24-48 horas revisa tus reportes: deberías ver ventas reales con su valor. Yo arreglaría también el filtro de tráfico interno pendiente — tu propio equipo está inflando tus visitas.",
       },
     ],
     timestamp: new Date("2026-05-10T10:03:10"),

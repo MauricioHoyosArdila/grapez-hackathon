@@ -28,7 +28,11 @@ export async function POST(req: NextRequest) {
     throw err
   }
 
-  const { message, clientId } = await req.json()
+  const { message, clientId, image } = (await req.json()) as {
+    message: string
+    clientId: string
+    image?: { mimeType: string; data: string }
+  }
 
   const userId = (session.userEmail ?? "local-dev-user").replace(/[^a-z0-9-]/g, "-")
   const localSessionId = `grapez-${clientId.replace(/[^a-z0-9-]/g, "-")}`
@@ -45,9 +49,13 @@ export async function POST(req: NextRequest) {
     if (agentMode === "production") {
       // For Agent Runtime, sessions are server-assigned. We store the server ID in
       // iron-session so subsequent messages reuse the same conversation history.
+      // streamQuery only accepts a text message — images can't travel by this channel.
+      const productionMessage = image
+        ? `${message}\n\n[Nota: el consultor adjuntó una imagen que este canal no puede transmitir — pídele que la describa en texto.]`
+        : message
       const storedAgentSessionId = session.agentSessions?.[clientId]
       const { stream: agentStream, sessionId: assignedSessionId } =
-        await callAgentRuntime(userId, storedAgentSessionId ?? null, message, tokens)
+        await callAgentRuntime(userId, storedAgentSessionId ?? null, productionMessage, tokens)
 
       // Persist the server-assigned session ID if it's new
       if (assignedSessionId && assignedSessionId !== storedAgentSessionId) {
@@ -57,7 +65,7 @@ export async function POST(req: NextRequest) {
 
       stream = agentStream
     } else {
-      stream = await callLocalAdk(userId, localSessionId, message, tokens)
+      stream = await callLocalAdk(userId, localSessionId, message, tokens, image)
     }
 
     return new Response(stream, {
@@ -115,11 +123,21 @@ async function callLocalAdk(
   userId: string,
   sessionId: string,
   message: string,
-  tokens: { access_token: string; refresh_token: string; token_expiry: number }
+  tokens: { access_token: string; refresh_token: string; token_expiry: number },
+  image?: { mimeType: string; data: string }
 ): Promise<ReadableStream<Uint8Array>> {
   const base = process.env.AGENT_DEV_SERVER_URL ?? "http://127.0.0.1:8000"
 
   await ensureAdkSession(base, userId, sessionId, tokens)
+
+  // Gemini is multimodal: images travel as inline_data parts alongside the text.
+  const parts: Array<Record<string, unknown>> = []
+  if (image) {
+    parts.push({ inline_data: { mime_type: image.mimeType, data: image.data } })
+  }
+  if (message) {
+    parts.push({ text: message })
+  }
 
   const res = await fetch(`${base}/run_sse`, {
     method: "POST",
@@ -128,8 +146,8 @@ async function callLocalAdk(
       app_name: APP_NAME,
       user_id: userId,
       session_id: sessionId,
-      new_message: { parts: [{ text: message }] },
-      streaming: false,
+      new_message: { parts },
+      streaming: true,
     }),
   })
 
@@ -350,12 +368,25 @@ function ndjsonToSseStream(body: string): ReadableStream<Uint8Array> {
 
 // ─── Stream transformer ───────────────────────────────────────────────────────
 
+// Friendly labels for tool calls — shown in the chat as "working" status while
+// the agent runs long operations. Unknown tools fall back to a generic label.
+const TOOL_STATUS_LABELS: Record<string, string> = {
+  ga4_agent: "Revisando Google Analytics…",
+  gtm_agent: "Revisando Google Tag Manager…",
+  web_analyzer_agent: "Analizando tu sitio web…",
+  brave_web_search: "Investigando tu negocio en internet…",
+  crawl_site: "Explorando tu sitio web…",
+  screenshot_site: "Tomando una captura de tu sitio…",
+}
+const DEFAULT_TOOL_STATUS = "Trabajando…"
+
 // Handles SSE and ndjson formats:
 //   "sse"  — local ADK: lines prefixed with "data: " (skip lines without prefix)
 //   "auto" — Agent Runtime: "data: " prefix stripped when present, raw JSON otherwise
 //
 // Output: plain-text SSE for the frontend. Newlines in text are encoded as |NL|
-// so they survive the client's line-by-line SSE parser.
+// so they survive the client's line-by-line SSE parser. Tool calls are emitted
+// as "data: |STATUS|<label>" lines so the chat can show a working indicator.
 function transformStream(
   body: ReadableStream<Uint8Array>,
   format: "sse" | "auto"
@@ -370,6 +401,10 @@ function transformStream(
       let linesProcessed = 0
       let eventsSeen = 0
       let authorMismatches = 0
+      // Con streaming:true el ADK emite eventos parciales (delta por token) y al final
+      // un evento agregado con el texto completo del turno — hay que saltar el agregado
+      // para no duplicar el texto.
+      let sawPartial = false
 
       const processLine = (line: string) => {
         const trimmed = line.trim()
@@ -405,12 +440,34 @@ function transformStream(
           return
         }
 
-        type Part = { text?: string; function_call?: unknown; function_response?: unknown }
+        type FunctionCall = { name?: string }
+        type Part = {
+          text?: string
+          function_call?: FunctionCall
+          functionCall?: FunctionCall
+          function_response?: unknown
+        }
         const parts = (event.content as { parts?: Part[] } | undefined)?.parts ?? []
+
+        const isPartial = event.partial === true
 
         for (const part of parts) {
           if (typeof part.text === "string" && part.text) {
-            controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
+            if (isPartial) {
+              sawPartial = true
+              controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
+            } else if (sawPartial) {
+              // Evento agregado al final del turno streameado — ya emitimos sus deltas
+              sawPartial = false
+            } else {
+              // Turno sin partials (ej: respuesta corta no streameada) — emitir completo
+              controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
+            }
+          }
+          const toolName = part.functionCall?.name ?? part.function_call?.name
+          if (toolName) {
+            const label = TOOL_STATUS_LABELS[toolName] ?? DEFAULT_TOOL_STATUS
+            controller.enqueue(encoder.encode(`data: |STATUS|${label}\n`))
           }
         }
       }
