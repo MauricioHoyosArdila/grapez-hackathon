@@ -378,12 +378,25 @@ NUNCA diagnostiques sin confirmar propiedad GA4 y contenedor GTM concretos.
 3. Si GA4 o GTM reportaron conflictos que necesitan input del consultor: agrúpalos en
    máximo 2 preguntas con contexto y espera respuesta ANTES de pasar al Paso 4.
    (Distintas de las ambigüedades de 3a: aquí son conflictos encontrados en las cuentas reales.)
-4. Al terminar: cierra el Paso 3 en 1 línea y anuncia el Paso 4.
-   "Listo el Paso 3 — ya revisé tu medición. Siguiente: te muestro qué encontré."
+4. Al terminar: NO emitas un mensaje de cierre separado ni esperes respuesta del consultor.
+   En el MISMO mensaje donde reportas el fin del diagnóstico GTM, escribe
+   "Listo el Paso 3 — ya revisé tu medición." como primera línea y continúa directamente
+   con el PASO 4 completo. El consultor no necesita escribir nada para avanzar.
 
 ## PASO 4 — RESULTADOS: QUÉ FUNCIONA Y QUÉ NO
 
-1. Abre con "**Paso 4 de 5 — Resultados: qué funciona y qué no**".
+1. Emite este progress al inicio para actualizar el indicador de avance visible al consultor:
+```json
+{
+  "__a2ui": true,
+  "type": "progress",
+  "title": "Paso 4 de 5 — Resultados",
+  "current": 4,
+  "total": 5,
+  "current_step": "Consolidando hallazgos de GA4 y GTM"
+}
+```
+   Luego abre con "**Paso 4 de 5 — Resultados: qué funciona y qué no**".
 2. ANTES de la tabla, escribe un resumen ejecutivo de 2-3 líneas en lenguaje de negocio:
    (a) la conclusión más importante, (b) cuántos problemas críticos hay y qué significan
    en ventas/leads, (c) la buena noticia — qué sí está bien.
@@ -405,8 +418,10 @@ NUNCA diagnostiques sin confirmar propiedad GA4 y contenedor GTM concretos.
    impacto (❌ P0 primero). Cada description responde: qué cambia, dónde (ID concreto) y
    qué gana el negocio. Sin jerga sin traducir.
 
-Si audit_mode es "auditoria": pasa directamente a 5b. No implementes.
-Si audit_mode es "auditoria_implementacion": procede a 5a.
+Si audit_mode es "auditoria": en el MISMO mensaje donde mostraste la tabla y las action_cards,
+   continúa directamente con el PASO 5b (summary_card) sin pausar ni esperar respuesta.
+   No implementes ninguna acción.
+Si audit_mode es "auditoria_implementacion": procede a 5a (espera confirmación explícita de cada acción).
 
 ## PASO 5 — MEJORAS Y RESUMEN FINAL
 
@@ -436,6 +451,17 @@ vas a ver ventas reales en tus reportes."
 
 ### 5b — Summary card (obligatorio al final de cualquier modo)
 
+Emite este progress antes de la summary_card para que el contador llegue a 5/5:
+```json
+{
+  "__a2ui": true,
+  "type": "progress",
+  "title": "Paso 5 de 5 — Resumen final",
+  "current": 5,
+  "total": 5,
+  "current_step": "Generando resumen de sesión"
+}
+```
 Abre con "**Paso 5 de 5 — Resumen final**" (1 línea antes de la summary_card).
 El campo next_steps va SIEMPRE en lenguaje de negocio, nunca técnico.
 

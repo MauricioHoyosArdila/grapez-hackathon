@@ -32,12 +32,27 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
   const [imageError, setImageError] = useState<string | null>(null)
   const [workingStatus, setWorkingStatus] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, workingStatus])
+
+  // Auto-resize textarea: crece hasta 7 líneas, luego scroll interno
+  useEffect(() => {
+    const ta = inputRef.current
+    if (!ta) return
+    ta.style.height = "auto"
+    const cs = getComputedStyle(ta)
+    // border-box: el height CSS incluye bordes, pero scrollHeight no los incluye.
+    // Sumar los bordes evita que el contenido desborde 2px y active el scroll prematuramente.
+    const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth)
+    const maxH = parseFloat(cs.maxHeight) || 168
+    const scrollH = ta.scrollHeight
+    ta.style.height = `${scrollH + borderY}px`
+    ta.style.overflowY = scrollH > maxH ? "auto" : "hidden"
+  }, [input])
 
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -258,7 +273,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
       </div>
 
       {/* Mensajes */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5 bg-gblack">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 space-y-5 bg-gblack">
         {messages.length === 0 && !readOnly && (
           <ConversationStarters
             client={client}
@@ -270,7 +285,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
           <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}>
             <div className={`max-w-2xl w-full ${msg.role === "user" ? "ml-12" : "mr-12"}`}>
               {msg.role === "user" ? (
-                <div className="bg-glime text-gblack font-medium rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">
+                <div className="bg-glime text-gblack font-medium rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm break-words">
                   {msg.imageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -395,14 +410,21 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                   <path d="m21 15-5-5L5 21" />
                 </svg>
               </button>
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    sendMessage(e)
+                  }
+                }}
                 placeholder="Escribe tu respuesta… o pregunta lo que quieras"
                 disabled={loading}
-                className="flex-1 rounded-lg border border-gdark bg-gsurface px-4 py-2.5 text-sm text-white placeholder:text-ggray3 focus:outline-none focus:border-glime/60 disabled:opacity-50 transition-colors"
+                style={{ maxHeight: "10.5rem" }}
+                className="flex-1 min-w-0 rounded-lg border border-gdark bg-gsurface px-4 py-2.5 text-sm text-white placeholder:text-ggray3 focus:outline-none focus:border-glime/60 disabled:opacity-50 transition-colors resize-none overflow-y-hidden leading-relaxed"
               />
               <button
                 type="submit"

@@ -450,17 +450,27 @@ function transformStream(
         const parts = (event.content as { parts?: Part[] } | undefined)?.parts ?? []
 
         const isPartial = event.partial === true
+        // Capture streaming state BEFORE updating it so the parts loop can use it.
+        const wasStreaming = sawPartial
+        // Reset sawPartial on EVERY non-partial event, even when the event carries no
+        // text (e.g. a pure function_call). Without this, a function_call-only event
+        // leaves sawPartial=true and the planner's next text turn (post-tool synthesis)
+        // gets silently dropped — it looks like an aggregate but it's new content.
+        if (isPartial) {
+          sawPartial = true
+        } else {
+          sawPartial = false
+        }
 
         for (const part of parts) {
           if (typeof part.text === "string" && part.text) {
             if (isPartial) {
-              sawPartial = true
               controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
-            } else if (sawPartial) {
-              // Evento agregado al final del turno streameado — ya emitimos sus deltas
-              sawPartial = false
+            } else if (wasStreaming) {
+              // Non-partial after partials = aggregate of a streamed turn.
+              // Already emitted via deltas above — skip to avoid duplicating text.
             } else {
-              // Turno sin partials (ej: respuesta corta no streameada) — emitir completo
+              // Non-streaming response (no prior partials this turn) — emit complete text.
               controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
             }
           }
