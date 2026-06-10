@@ -16,9 +16,9 @@ const badgeStyles = {
 }
 
 const badgeLabels = {
-  high: "Impacto alto",
-  medium: "Impacto medio",
-  low: "Impacto bajo",
+  high: "High impact",
+  medium: "Medium impact",
+  low: "Low impact",
 }
 
 interface ActionCardProps {
@@ -48,7 +48,7 @@ export function ActionCard({ data, onConfirm, onCancel }: ActionCardProps) {
             }}
             className="px-4 py-1.5 text-sm font-bold bg-glime text-gblack rounded-lg hover:bg-[#c8f070] transition-colors"
           >
-            Aplicar cambio
+            Apply change
           </button>
           <button
             onClick={() => {
@@ -57,18 +57,18 @@ export function ActionCard({ data, onConfirm, onCancel }: ActionCardProps) {
             }}
             className="px-4 py-1.5 text-sm font-medium border border-gdark text-ggray2 rounded-lg hover:border-ggray2 transition-colors"
           >
-            Omitir por ahora
+            Skip for now
           </button>
         </div>
       )}
       {data.requires_confirmation && status === "confirmed" && (
         <span className="inline-block px-3 py-1.5 text-sm font-medium bg-glime/10 text-glime border border-glime/30 rounded-lg">
-          ✓ Aprobado — aplicando cambio
+          ✓ Approved — applying change
         </span>
       )}
       {data.requires_confirmation && status === "skipped" && (
         <span className="inline-block px-3 py-1.5 text-sm font-medium text-ggray3 border border-gdark rounded-lg">
-          Omitido — queda como pendiente
+          Skipped — saved as pending
         </span>
       )}
     </div>

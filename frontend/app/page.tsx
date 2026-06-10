@@ -28,13 +28,13 @@ export default async function HomePage() {
                 href="/api/oauth/google/start"
                 className="text-xs border border-gdark px-3 py-1.5 rounded-full text-ggray2 hover:border-glime/50 hover:text-glime transition-colors"
               >
-                Reconectar Google
+                Reconnect Google
               </a>
               <a
                 href="/api/oauth/google/logout"
                 className="text-xs text-ggray3 hover:text-white transition-colors"
               >
-                Cerrar sesión
+                Sign out
               </a>
             </div>
           ) : (
@@ -42,7 +42,7 @@ export default async function HomePage() {
               href="/api/oauth/google/start"
               className="text-sm font-bold px-4 py-1.5 bg-glime text-gblack rounded-full hover:bg-[#c8f070] transition-colors"
             >
-              Conectar Google
+              Connect Google
             </a>
           )}
         </div>
@@ -54,7 +54,7 @@ export default async function HomePage() {
           {/* ── Nuevo análisis ── */}
           <section>
             <p className="text-glime text-xs font-bold tracking-widest uppercase mb-3">
-              Nuevo análisis
+              New analysis
             </p>
             <Link
               href="/clients/new"
@@ -62,10 +62,10 @@ export default async function HomePage() {
             >
               <div>
                 <h2 className="text-base font-bold text-white group-hover:text-glime transition-colors mb-0.5">
-                  Diagnosticar nuevo ecosistema
+                  Diagnose a new ecosystem
                 </h2>
                 <p className="text-xs text-ggray3">
-                  Ingresa los datos del cliente y el agente analiza GA4 + GTM en tiempo real.
+                  Enter the client&apos;s details and the agent analyzes GA4 + GTM in real time.
                 </p>
               </div>
               <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-glime text-gblack group-hover:bg-[#c8f070] transition-colors">
@@ -90,7 +90,7 @@ export default async function HomePage() {
           {liveClients.length > 0 && (
             <section>
               <p className="text-ggray2 text-xs font-bold tracking-widest uppercase mb-3">
-                Mis análisis
+                My analyses
               </p>
               <div className="grid gap-3">
                 {liveClients.map((client) => (
@@ -109,13 +109,13 @@ export default async function HomePage() {
                         href={`/clients/${client.id}/chat?reset=true`}
                         className="text-xs border border-gdark px-3 py-1.5 rounded-lg text-ggray2 hover:border-ggray3 hover:text-white transition-colors whitespace-nowrap"
                       >
-                        Reiniciar
+                        Reset
                       </Link>
                       <Link
                         href={`/clients/${client.id}/chat`}
                         className="text-xs font-bold px-4 py-1.5 bg-glime text-gblack rounded-lg hover:bg-[#c8f070] transition-colors whitespace-nowrap"
                       >
-                        Continuar →
+                        Continue →
                       </Link>
                     </div>
                   </div>
@@ -127,7 +127,7 @@ export default async function HomePage() {
           {/* ── Demos de ejemplo ── */}
           <section>
             <p className="text-ggray3 text-xs font-bold tracking-widest uppercase mb-3">
-              Conversaciones de ejemplo
+              Example conversations
             </p>
             <div className="grid gap-3">
               {demoClients.map((client) => (
@@ -154,7 +154,7 @@ export default async function HomePage() {
                       href={`/clients/${client.id}/chat`}
                       className="text-xs font-medium text-ggray2 border border-gdark px-4 py-2 rounded-lg hover:border-ggray3 hover:text-white transition-colors whitespace-nowrap"
                     >
-                      Ver demo →
+                      View demo →
                     </Link>
                   </div>
                 </div>
@@ -170,19 +170,19 @@ export default async function HomePage() {
               Powered by AI Agents
             </span>
             <h1 className="text-4xl font-extrabold text-white leading-tight max-w-lg">
-              Ecosistema de Medición<br />
-              <span className="text-glime">automatizado</span>
+              Automated<br />
+              <span className="text-glime">Measurement Ecosystem</span>
             </h1>
             <p className="text-ggray2 text-sm max-w-md leading-relaxed">
-              Conecta tu cuenta de Google para diagnosticar y configurar GA4, GTM y el sitio
-              web de tus clientes con agentes de IA especializados.
+              Connect your Google account to diagnose and configure GA4, GTM and your
+              clients&apos; websites with specialized AI agents.
             </p>
           </div>
           <a
             href="/api/oauth/google/start"
             className="px-7 py-3 bg-glime text-gblack text-sm font-bold rounded-full hover:bg-[#c8f070] transition-colors"
           >
-            Conectar cuenta Google
+            Connect Google account
           </a>
         </div>
       )}
@@ -197,8 +197,8 @@ function StatusBadge({ status }: { status: string }) {
     error: "bg-gburg/40 text-[#ff8b8b] border border-[#ff8b8b]/30",
   }
   const labels: Record<string, string> = {
-    connected: "Conectado",
-    pending: "Pendiente",
+    connected: "Connected",
+    pending: "Pending",
     error: "Error",
   }
   return (

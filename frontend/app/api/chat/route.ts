@@ -2,8 +2,14 @@ import { NextRequest } from "next/server"
 import { getIronSession, type IronSession } from "iron-session"
 import { SessionData, sessionOptions } from "@/lib/session"
 import { cookies } from "next/headers"
+import { Agent as UndiciAgent } from "undici"
 
 const APP_NAME = "planner_agent"
+
+// Las tools del agente (diagnóstico GA4/GTM) pueden pasar minutos sin emitir eventos.
+// Sin esto, undici corta el body por inactividad → el ADK cierra el runner a mitad
+// del análisis y el turno muere con el progress a medias.
+const adkDispatcher = new UndiciAgent({ headersTimeout: 0, bodyTimeout: 0 })
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies()
@@ -51,7 +57,7 @@ export async function POST(req: NextRequest) {
       // iron-session so subsequent messages reuse the same conversation history.
       // streamQuery only accepts a text message — images can't travel by this channel.
       const productionMessage = image
-        ? `${message}\n\n[Nota: el consultor adjuntó una imagen que este canal no puede transmitir — pídele que la describa en texto.]`
+        ? `${message}\n\n[Note: the consultant attached an image that this channel cannot transmit — ask them to describe it in text.]`
         : message
       const storedAgentSessionId = session.agentSessions?.[clientId]
       const { stream: agentStream, sessionId: assignedSessionId } =
@@ -149,6 +155,8 @@ async function callLocalAdk(
       new_message: { parts },
       streaming: true,
     }),
+    // dispatcher es de undici — no está en el tipo RequestInit del DOM
+    ...({ dispatcher: adkDispatcher } as RequestInit),
   })
 
   if (!res.ok || !res.body) {
@@ -371,14 +379,14 @@ function ndjsonToSseStream(body: string): ReadableStream<Uint8Array> {
 // Friendly labels for tool calls — shown in the chat as "working" status while
 // the agent runs long operations. Unknown tools fall back to a generic label.
 const TOOL_STATUS_LABELS: Record<string, string> = {
-  ga4_agent: "Revisando Google Analytics…",
-  gtm_agent: "Revisando Google Tag Manager…",
-  web_analyzer_agent: "Analizando tu sitio web…",
-  brave_web_search: "Investigando tu negocio en internet…",
-  crawl_site: "Explorando tu sitio web…",
-  screenshot_site: "Tomando una captura de tu sitio…",
+  ga4_agent: "Reviewing Google Analytics…",
+  gtm_agent: "Reviewing Google Tag Manager…",
+  web_analyzer_agent: "Analyzing your website…",
+  brave_web_search: "Researching your business online…",
+  crawl_site: "Exploring your website…",
+  screenshot_site: "Taking a screenshot of your site…",
 }
-const DEFAULT_TOOL_STATUS = "Trabajando…"
+const DEFAULT_TOOL_STATUS = "Working…"
 
 // Handles SSE and ndjson formats:
 //   "sse"  — local ADK: lines prefixed with "data: " (skip lines without prefix)
@@ -397,13 +405,24 @@ function transformStream(
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       const reader = body.getReader()
+      // Heartbeat: mantiene viva la conexión route→browser durante tools largas.
+      // El cliente ignora líneas que no empiezan con "data: ".
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": ping\n"))
+        } catch {
+          clearInterval(heartbeat)
+        }
+      }, 15000)
       let buffer = ""
       let linesProcessed = 0
       let eventsSeen = 0
       let authorMismatches = 0
       // Con streaming:true el ADK emite eventos parciales (delta por token) y al final
-      // un evento agregado con el texto completo del turno — hay que saltar el agregado
-      // para no duplicar el texto.
+      // un evento agregado con el texto completo del turno. Acumulamos lo emitido vía
+      // parciales para descartar el agregado SOLO si es duplicado — texto no-parcial
+      // genuinamente nuevo (ej: tras tool calls) debe emitirse siempre.
+      let partialAccum = ""
       let sawPartial = false
 
       const processLine = (line: string) => {
@@ -465,13 +484,22 @@ function transformStream(
         for (const part of parts) {
           if (typeof part.text === "string" && part.text) {
             if (isPartial) {
+              partialAccum += part.text
               controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
-            } else if (wasStreaming) {
-              // Non-partial after partials = aggregate of a streamed turn.
-              // Already emitted via deltas above — skip to avoid duplicating text.
+            } else if (
+              wasStreaming &&
+              partialAccum &&
+              (part.text === partialAccum ||
+                partialAccum.endsWith(part.text) ||
+                part.text.endsWith(partialAccum))
+            ) {
+              // Agregado del turno recién streameado vía parciales — descartar duplicado.
+              // Doble guarda: venía streameando (wasStreaming) Y el contenido coincide.
+              partialAccum = ""
             } else {
-              // Non-streaming response (no prior partials this turn) — emit complete text.
+              // Texto completo genuinamente nuevo (turno sin parciales o tras tool call)
               controller.enqueue(encoder.encode(`data: ${part.text.replace(/\n/g, "|NL|")}\n`))
+              partialAccum = ""
             }
           }
           const toolName = part.functionCall?.name ?? part.function_call?.name
@@ -496,6 +524,7 @@ function transformStream(
           for (const line of lines) processLine(line)
         }
       } finally {
+        clearInterval(heartbeat)
         reader.releaseLock()
         console.log(`[transformStream format=${format}] lines=${linesProcessed} events=${eventsSeen} authorMismatches=${authorMismatches}`)
         controller.close()

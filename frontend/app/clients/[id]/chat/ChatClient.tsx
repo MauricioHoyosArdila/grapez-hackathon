@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ChatMessage, Client } from "@/lib/types"
@@ -8,6 +8,7 @@ import { A2UIRenderer, parseA2UI } from "@/components/a2ui/A2UIRenderer"
 import { stripIncompleteA2UI } from "@/lib/parse-a2ui"
 import { renderMarkdown } from "@/lib/render-markdown"
 import { ConversationStarters } from "@/components/chat/ConversationStarters"
+import { normalizeMessages } from "@/lib/normalize-conversation"
 
 interface ChatClientProps {
   client: Client
@@ -35,6 +36,21 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Vista normalizada: un solo banner por paso y sin progress duplicadas,
+  // sin importar cuántas veces las repita el modelo. El estado no se modifica.
+  const displayMessages = useMemo(() => normalizeMessages(messages), [messages])
+
+  // El turno terminó con una progress inconclusa como último elemento: el análisis
+  // quedó en pausa (corte de conexión o el modelo se detuvo) — ofrecer retomar.
+  const lastMsg = displayMessages[displayMessages.length - 1]
+  const lastComp = lastMsg?.components?.[lastMsg.components.length - 1]
+  const endedMidWork =
+    !loading &&
+    !readOnly &&
+    lastMsg?.role === "assistant" &&
+    lastComp?.type === "progress" &&
+    lastComp.current < lastComp.total
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, workingStatus])
@@ -59,11 +75,11 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
     e.target.value = ""
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      setImageError("Solo se pueden adjuntar imágenes (PNG, JPG, WebP…).")
+      setImageError("Only images can be attached (PNG, JPG, WebP…).")
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      setImageError("La imagen supera 4MB. Usa una captura más liviana.")
+      setImageError("The image exceeds 4MB. Use a lighter screenshot.")
       return
     }
     setImageError(null)
@@ -117,7 +133,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                 ? {
                     ...m,
                     content:
-                      "Tu sesión de Google expiró. [Reconectar cuenta Google](/api/oauth/google/start)",
+                      "Your Google session expired. [Reconnect Google account](/api/oauth/google/start)",
                   }
                 : m
             )
@@ -131,32 +147,40 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let fullText = ""
+      // Las líneas SSE pueden llegar fragmentadas entre lecturas — la última línea
+      // de cada chunk se conserva en el buffer hasta que llegue su "\n" de cierre.
+      let lineBuffer = ""
+
+      const processLine = (line: string) => {
+        if (!line.startsWith("data: ")) return
+        const payload = line.slice(6)
+        if (payload.startsWith("|STATUS|")) {
+          setWorkingStatus(payload.slice(8))
+          return
+        }
+        setWorkingStatus(null)
+        fullText += payload.replace(/\|NL\|/g, "\n")
+        // Durante el stream: ocultar bloques A2UI incompletos (evita JSON crudo parpadeando)
+        const parsed = parseA2UI(stripIncompleteA2UI(fullText))
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: parsed.text ?? "", components: parsed.components }
+              : m
+          )
+        )
+      }
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("data: ")) {
-            const payload = line.slice(6)
-            if (payload.startsWith("|STATUS|")) {
-              setWorkingStatus(payload.slice(8))
-              continue
-            }
-            setWorkingStatus(null)
-            fullText += payload.replace(/\|NL\|/g, "\n")
-            // Durante el stream: ocultar bloques A2UI incompletos (evita JSON crudo parpadeando)
-            const parsed = parseA2UI(stripIncompleteA2UI(fullText))
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: parsed.text ?? "", components: parsed.components }
-                  : m
-              )
-            )
-          }
+        if (done) {
+          if (lineBuffer) processLine(lineBuffer)
+          break
         }
+        lineBuffer += decoder.decode(value, { stream: true })
+        const lines = lineBuffer.split("\n")
+        lineBuffer = lines.pop() ?? ""
+        for (const line of lines) processLine(line)
       }
 
       // Stream cerrado: parse final con el texto completo, sin recortes
@@ -172,7 +196,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: "Error al conectar con el agente. Intenta de nuevo." }
+            ? { ...m, content: "Error connecting to the agent. Please try again." }
             : m
         )
       )
@@ -203,11 +227,11 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
   }
 
   function handleConfirm(actionId: string, title: string) {
-    submitMessage(`Confirmo: ${title}`)
+    submitMessage(`Confirm: ${title}`)
   }
 
   function handleCancel(actionId: string, title: string) {
-    submitMessage(`Prefiero no aplicar: ${title}`)
+    submitMessage(`Skip: ${title}`)
   }
 
   function handleChoice(label: string) {
@@ -222,7 +246,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
           <button
             onClick={() => { router.push("/"); router.refresh() }}
             className="text-ggray3 hover:text-white transition-colors shrink-0 flex items-center gap-1.5"
-            aria-label="Volver al inicio"
+            aria-label="Back to home"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -237,7 +261,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
             >
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            <span className="text-xs hidden sm:inline">Inicio</span>
+            <span className="text-xs hidden sm:inline">Home</span>
           </button>
           <span className="text-ggray3/30 text-sm shrink-0">|</span>
           <div className="min-w-0">
@@ -250,7 +274,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
           <button
             onClick={handleReset}
             disabled={loading || resetting}
-            aria-label="Reiniciar conversación desde cero"
+            aria-label="Reset conversation from scratch"
             className="shrink-0 inline-flex items-center gap-1.5 text-xs text-ggray3 border border-gdark px-3 py-1.5 rounded-lg hover:border-ggray3 hover:text-ggray2 disabled:opacity-40 transition-colors"
           >
             <svg
@@ -267,7 +291,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
               <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
               <path d="M3 3v5h5" />
             </svg>
-            {resetting ? "Reiniciando…" : "Reiniciar sesión"}
+            {resetting ? "Resetting…" : "Reset session"}
           </button>
         )}
       </div>
@@ -281,7 +305,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
             onFocusInput={() => inputRef.current?.focus()}
           />
         )}
-        {messages.map((msg) => (
+        {displayMessages.map((msg) => (
           <div key={msg.id} className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}>
             <div className={`max-w-2xl w-full ${msg.role === "user" ? "ml-12" : "mr-12"}`}>
               {msg.role === "user" ? (
@@ -319,7 +343,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                       ))}
                     </div>
                   )}
-                  {loading && msg.id === messages[messages.length - 1]?.id && (
+                  {loading && msg.id === displayMessages[displayMessages.length - 1]?.id && (
                     <div className="flex items-center gap-2 py-2">
                       <div className="flex gap-1">
                         <span className="w-2 h-2 rounded-full bg-glime/60 animate-bounce [animation-delay:0ms]" />
@@ -327,7 +351,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                         <span className="w-2 h-2 rounded-full bg-glime/60 animate-bounce [animation-delay:300ms]" />
                       </div>
                       <span className="text-xs text-ggray3">
-                        {workingStatus ?? "Trabajando…"}
+                        {workingStatus ?? "Working…"}
                       </span>
                     </div>
                   )}
@@ -336,6 +360,19 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
             </div>
           </div>
         ))}
+        {endedMidWork && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-3 rounded-lg border border-gdark bg-gsurface px-4 py-3 max-w-2xl">
+              <span className="text-sm text-ggray2">The analysis was paused before finishing.</span>
+              <button
+                onClick={() => submitMessage("Continue the analysis where you left off.")}
+                className="shrink-0 px-3 py-1.5 text-sm font-bold bg-glime text-gblack rounded-lg hover:bg-[#c8f070] transition-colors"
+              >
+                Resume analysis
+              </button>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
@@ -347,7 +384,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            Conversación de ejemplo — solo lectura
+            Example conversation — read only
           </div>
         </div>
       ) : (
@@ -367,11 +404,11 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                   alt="Imagen adjunta"
                   className="h-12 w-12 object-cover rounded-md"
                 />
-                <span className="text-xs text-ggray3">Imagen lista para enviar</span>
+                <span className="text-xs text-ggray3">Image ready to send</span>
                 <button
                   type="button"
                   onClick={() => setAttachedImage(null)}
-                  aria-label="Quitar imagen"
+                  aria-label="Remove image"
                   className="text-ggray3 hover:text-white transition-colors px-1"
                 >
                   ✕
@@ -390,8 +427,8 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={loading}
-                aria-label="Adjuntar imagen"
-                title="Adjuntar imagen (captura de tu sitio, GA4, GTM…)"
+                aria-label="Attach image"
+                title="Attach an image (screenshot of your site, GA4, GTM…)"
                 className="shrink-0 px-3 py-2.5 rounded-lg border border-gdark text-ggray3 hover:border-glime/60 hover:text-glime disabled:opacity-40 transition-colors"
               >
                 <svg
@@ -421,7 +458,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                     sendMessage(e)
                   }
                 }}
-                placeholder="Escribe tu respuesta… o pregunta lo que quieras"
+                placeholder="Type your answer… or ask anything"
                 disabled={loading}
                 style={{ maxHeight: "10.5rem" }}
                 className="flex-1 min-w-0 rounded-lg border border-gdark bg-gsurface px-4 py-2.5 text-sm text-white placeholder:text-ggray3 focus:outline-none focus:border-glime/60 disabled:opacity-50 transition-colors resize-none overflow-y-hidden leading-relaxed"
@@ -431,7 +468,7 @@ export function ChatClient({ client, initialMessages = [], readOnly = false }: C
                 disabled={loading || (!input.trim() && !attachedImage)}
                 className="px-5 py-2.5 text-sm font-bold bg-glime text-gblack rounded-lg hover:bg-[#c8f070] disabled:opacity-40 transition-colors"
               >
-                Enviar
+                Send
               </button>
             </div>
           </div>

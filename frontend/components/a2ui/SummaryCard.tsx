@@ -3,10 +3,10 @@
 import { A2UISummaryCard } from "@/lib/types"
 
 const statLabels = {
-  criticos_encontrados: "Críticos",
-  mejorables_encontrados: "Mejorables",
-  correctos: "Correctos",
-  acciones_implementadas: "Implementados",
+  criticos_encontrados: "Critical",
+  mejorables_encontrados: "Improvable",
+  correctos: "Correct",
+  acciones_implementadas: "Implemented",
 }
 
 export function SummaryCard({ data }: { data: A2UISummaryCard }) {
@@ -17,7 +17,7 @@ export function SummaryCard({ data }: { data: A2UISummaryCard }) {
         <h3 className="font-bold text-white text-sm">✅ {data.title}</h3>
         {data.mode && (
           <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-glime/15 text-glime border border-glime/30 shrink-0">
-            {data.mode === "auditoria" ? "Solo auditoría" : "Auditoría + implementación"}
+            {data.mode === "auditoria" ? "Audit only" : "Audit + implementation"}
           </span>
         )}
       </div>
@@ -38,7 +38,7 @@ export function SummaryCard({ data }: { data: A2UISummaryCard }) {
       {data.top_wins?.length > 0 && (
         <div>
           <div className="text-xs font-bold text-ggray3 uppercase tracking-wider mb-2">
-            🏆 Logros
+            🏆 Wins
           </div>
           <ul className="space-y-1.5">
             {data.top_wins.map((win, i) => (
@@ -55,7 +55,7 @@ export function SummaryCard({ data }: { data: A2UISummaryCard }) {
       {data.pending_actions?.length > 0 && (
         <div>
           <div className="text-xs font-bold text-ggray3 uppercase tracking-wider mb-2">
-            ⏳ Pendiente
+            ⏳ Pending
           </div>
           <ul className="space-y-1.5">
             {data.pending_actions.map((action, i) => (
@@ -72,7 +72,7 @@ export function SummaryCard({ data }: { data: A2UISummaryCard }) {
       {data.next_steps && (
         <div className="bg-gdark rounded-lg px-3 py-2.5">
           <div className="text-xs font-bold text-ggray3 uppercase tracking-wider mb-1">
-            Próximo paso
+            Next step
           </div>
           <div className="text-xs text-ggray2 leading-relaxed">{data.next_steps}</div>
         </div>

@@ -50,6 +50,35 @@ export function renderMarkdown(text: string): React.ReactNode {
       continue
     }
 
+    // Banner de paso: "Step N of M — Name" (o "Paso N de M") con o sin negrita
+    const stepMatch = line.trim().match(/^(?:\*\*)?(?:Paso|Step) (\d+) (?:de|of) (\d+) [—-] (.+?)(?:\*\*)?$/)
+    if (stepMatch) {
+      const n = Number(stepMatch[1])
+      const total = Number(stepMatch[2])
+      const name = stepMatch[3]
+      result.push(
+        <div
+          key={k++}
+          className="flex items-center gap-3 my-3 rounded-lg border border-glime/30 bg-glime/5 px-3 py-2"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wider text-glime shrink-0">
+            Step {n} of {total}
+          </span>
+          <div className="flex gap-1 shrink-0">
+            {Array.from({ length: total }).map((_, j) => (
+              <span
+                key={j}
+                className={`h-1.5 w-4 rounded-full ${j < n ? "bg-glime" : "bg-gdark"}`}
+              />
+            ))}
+          </div>
+          <span className="text-sm font-bold text-white truncate">{name}</span>
+        </div>
+      )
+      i++
+      continue
+    }
+
     // Header (## Título) — bold blanco, sin tipografías gigantes en el chat
     const headerMatch = line.match(/^#{1,6}\s+(.*)$/)
     if (headerMatch) {

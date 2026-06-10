@@ -23,8 +23,8 @@ export function DeleteClientButton({ clientId }: { clientId: string }) {
     <button
       onClick={handleDelete}
       disabled={loading}
-      aria-label="Eliminar cliente"
-      title="Eliminar"
+      aria-label="Delete client"
+      title="Delete"
       className="p-1.5 text-ggray3 hover:text-[#ff8b8b] disabled:opacity-40 transition-colors rounded"
     >
       <svg

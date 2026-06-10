@@ -30,12 +30,12 @@ export default async function NewClientPage() {
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5" aria-hidden="true">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            Volver
+            Back
           </Link>
-          <p className="text-glime text-xs font-bold tracking-widest uppercase mb-2">Nuevo análisis</p>
-          <h1 className="text-2xl font-extrabold text-white">¿A quién vamos a diagnosticar?</h1>
+          <p className="text-glime text-xs font-bold tracking-widest uppercase mb-2">New analysis</p>
+          <h1 className="text-2xl font-extrabold text-white">Who are we diagnosing?</h1>
           <p className="text-ggray3 text-sm mt-2 leading-relaxed">
-            El agente usará esta información para personalizar el diagnóstico de GA4 + GTM.
+            The agent will use this information to personalize the GA4 + GTM diagnostic.
           </p>
         </div>
 

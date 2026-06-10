@@ -16,15 +16,83 @@ export function parseA2UI(text: string): { text?: string; components: A2UICompon
     } catch {}
   }
 
-  // 2. JSON inline — cuando el agente omite los backticks
-  // Busca objetos JSON completos usando conteo de llaves
-  if (components.length === 0) {
-    const { found, cleanText: ct } = extractInlineA2UI(cleanText)
-    components.push(...found)
-    if (found.length > 0) cleanText = ct
-  }
+  // 2. JSON inline — SIEMPRE: rescata componentes válidos aunque un bloque
+  // malformado anterior haya roto el matching de fences
+  const { found, cleanText: ct } = extractInlineA2UI(cleanText)
+  components.push(...found)
+  if (found.length > 0) cleanText = ct
+
+  // 3. Saneamiento: el usuario nunca debe ver JSON A2UI crudo — se descarta
+  // cualquier bloque malformado o resto de fence que haya quedado en el texto
+  cleanText = removeA2UIGarbage(cleanText)
 
   return { text: cleanText || undefined, components }
+}
+
+// Elimina del texto visible la basura A2UI que no se pudo extraer como componente:
+// bloques ```json malformados o sin cerrar, fragmentos inline inválidos y fences huérfanos.
+function removeA2UIGarbage(text: string): string {
+  let clean = text
+
+  // Bloques ```json (cerrados o no) que aún contienen "__a2ui" — son bloques
+  // malformados o restos de extracción: se descartan completos.
+  let idx = clean.indexOf("```json")
+  while (idx !== -1) {
+    // El cierre válido es ``` en su propia línea (no el inicio de otro ```json)
+    const closeMatch = /\n```(?:\n|$)/.exec(clean.slice(idx + 7))
+    const end = closeMatch ? idx + 7 + closeMatch.index + closeMatch[0].length : clean.length
+    const segment = clean.slice(idx, end)
+    if (segment.includes("__a2ui")) {
+      console.warn("[parseA2UI] bloque A2UI malformado descartado del texto visible")
+      clean = clean.slice(0, idx) + clean.slice(end)
+      idx = clean.indexOf("```json")
+    } else {
+      idx = clean.indexOf("```json", end)
+    }
+  }
+
+  // Fragmentos inline {"__a2ui" que no se extrajeron: JSON inválido (balanceado pero
+  // no parseable) se elimina por span; sin cerrar se corta hasta el final del texto.
+  const inlineRe = /\{\s*"__a2ui"/g
+  let m: RegExpExecArray | null
+  while ((m = inlineRe.exec(clean)) !== null) {
+    const end = findJsonEnd(clean, m.index)
+    console.warn("[parseA2UI] fragmento A2UI inválido descartado del texto visible")
+    if (end === -1) {
+      clean = clean.slice(0, m.index)
+      break
+    }
+    clean = clean.slice(0, m.index) + clean.slice(end)
+    inlineRe.lastIndex = m.index
+  }
+
+  // Fences huérfanos que quedaron en líneas sueltas
+  clean = clean
+    .split("\n")
+    .filter((line) => line.trim() !== "```" && line.trim() !== "```json")
+    .join("\n")
+
+  return clean.trim()
+}
+
+// Índice siguiente al cierre del objeto JSON que empieza en `start`, o -1 si nunca balancea.
+function findJsonEnd(text: string, start: number): number {
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (esc) { esc = false; continue }
+    if (ch === "\\" && inStr) { esc = true; continue }
+    if (ch === '"') { inStr = !inStr; continue }
+    if (inStr) continue
+    if (ch === "{") depth++
+    else if (ch === "}") {
+      depth--
+      if (depth === 0) return i + 1
+    }
+  }
+  return -1
 }
 
 // Recorta del final del texto cualquier bloque A2UI incompleto, para no mostrar
@@ -107,7 +175,9 @@ function extractInlineA2UI(
       j++
     }
 
-    if (depth > 0) i = j + 1
+    // Si la llave nunca balanceó (bloque roto antes de un objeto válido), avanzar de a
+    // un carácter — así los objetos internos válidos sí se escanean por separado.
+    if (depth > 0) i++
     else if (toRemove.length === 0 || toRemove[toRemove.length - 1].end !== i) i++
   }
 

@@ -8,24 +8,24 @@ const INDUSTRIES = [
   "Lead Generation",
   "SaaS",
   "Retail",
-  "Servicios locales",
-  "Educación",
-  "Medios y contenido",
-  "Salud",
+  "Local services",
+  "Education",
+  "Media & content",
+  "Healthcare",
   "Fintech",
-  "Otro",
+  "Other",
 ]
 
 const MODO_OPTIONS = [
   {
     value: "auditoria" as const,
-    label: "Solo auditoría",
-    description: "Diagnóstico completo del ecosistema (GA4 + GTM + sitio web). Te entrego el análisis y las recomendaciones sin aplicar cambios.",
+    label: "Audit only",
+    description: "Full ecosystem diagnostic (GA4 + GTM + website). You get the analysis and recommendations without applying any changes.",
   },
   {
     value: "auditoria_implementacion" as const,
-    label: "Auditoría + implementación",
-    description: "Diagnóstico completo, y luego aplico los cambios que confirmes, uno por uno, con tu aprobación explícita antes de cada acción.",
+    label: "Audit + implementation",
+    description: "Full diagnostic, then I apply the changes you confirm, one by one, with your explicit approval before each action.",
   },
 ]
 
@@ -54,14 +54,14 @@ export function NewClientForm() {
 
       if (!res.ok) {
         const data = await res.json()
-        setError(data.error === "missing_fields" ? "Completa todos los campos." : "Error al crear el análisis. Intenta de nuevo.")
+        setError(data.error === "missing_fields" ? "Please fill in all fields." : "Error creating the analysis. Please try again.")
         return
       }
 
       const { id } = await res.json()
       router.push(`/clients/${id}/chat?reset=true`)
     } catch {
-      setError("No se pudo conectar. Revisa tu conexión e intenta de nuevo.")
+      setError("Could not connect. Check your connection and try again.")
     } finally {
       setLoading(false)
     }
@@ -72,14 +72,14 @@ export function NewClientForm() {
       {/* Nombre */}
       <div>
         <label htmlFor="name" className="block text-xs font-bold text-ggray2 uppercase tracking-wider mb-2">
-          Nombre de la empresa
+          Company name
         </label>
         <input
           id="name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: Tienda Moda Colombia"
+          placeholder="E.g.: Fashion Store Co."
           required
           disabled={loading}
           className="w-full rounded-lg border border-gdark bg-gblack px-4 py-3 text-sm text-white placeholder:text-ggray3 focus:outline-none focus:border-glime/60 disabled:opacity-50 transition-colors"
@@ -89,25 +89,25 @@ export function NewClientForm() {
       {/* URL */}
       <div>
         <label htmlFor="url" className="block text-xs font-bold text-ggray2 uppercase tracking-wider mb-2">
-          Sitio web
+          Website
         </label>
         <input
           id="url"
           type="text"
           value={websiteUrl}
           onChange={(e) => setWebsiteUrl(e.target.value)}
-          placeholder="Ej: tiendamoda.co"
+          placeholder="E.g.: fashionstore.com"
           required
           disabled={loading}
           className="w-full rounded-lg border border-gdark bg-gblack px-4 py-3 text-sm text-white placeholder:text-ggray3 focus:outline-none focus:border-glime/60 disabled:opacity-50 transition-colors"
         />
-        <p className="text-xs text-ggray3 mt-1.5">No necesitas incluir https:// — lo agregamos automáticamente.</p>
+        <p className="text-xs text-ggray3 mt-1.5">No need to include https:// — we add it automatically.</p>
       </div>
 
       {/* Industria */}
       <div>
         <label htmlFor="industry" className="block text-xs font-bold text-ggray2 uppercase tracking-wider mb-2">
-          Modelo de negocio
+          Business model
         </label>
         <select
           id="industry"
@@ -117,7 +117,7 @@ export function NewClientForm() {
           disabled={loading}
           className="w-full rounded-lg border border-gdark bg-gblack px-4 py-3 text-sm text-white focus:outline-none focus:border-glime/60 disabled:opacity-50 transition-colors appearance-none cursor-pointer"
         >
-          <option value="" disabled>Selecciona el modelo de negocio...</option>
+          <option value="" disabled>Select the business model...</option>
           {INDUSTRIES.map((ind) => (
             <option key={ind} value={ind}>{ind}</option>
           ))}
@@ -127,7 +127,7 @@ export function NewClientForm() {
       {/* Modo de análisis */}
       <div>
         <p className="block text-xs font-bold text-ggray2 uppercase tracking-wider mb-3">
-          Modo de análisis
+          Analysis mode
         </p>
         <div className="space-y-2">
           {MODO_OPTIONS.map((opt) => (
@@ -172,7 +172,7 @@ export function NewClientForm() {
         disabled={loading || !name.trim() || !websiteUrl.trim() || !industry}
         className="w-full py-3 text-sm font-bold bg-glime text-gblack rounded-lg hover:bg-[#c8f070] disabled:opacity-40 transition-colors"
       >
-        {loading ? "Creando análisis…" : "Iniciar diagnóstico →"}
+        {loading ? "Creating analysis…" : "Start diagnostic →"}
       </button>
     </form>
   )

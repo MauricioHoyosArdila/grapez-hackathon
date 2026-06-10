@@ -36,7 +36,7 @@ root_agent = LlmAgent(
         http_options=types.HttpOptions(
             retry_options=types.HttpRetryOptions(
                 initial_delay=30,
-                attempts=3,
+                attempts=5,
             ),
         ),
     ),

@@ -10,7 +10,7 @@ const kumbhSans = Kumbh_Sans({
 
 export const metadata: Metadata = {
   title: "Grapez Analytics Agents",
-  description: "Sistema multi-agente para diagnóstico y configuración de ecosistemas de marketing analytics",
+  description: "Multi-agent system to diagnose and configure marketing analytics ecosystems",
 };
 
 export default function RootLayout({
