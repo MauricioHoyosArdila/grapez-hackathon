@@ -1,6 +1,6 @@
 # Testing Instructions — Grapez Analytics Agents
 
-**Live app:** https://grapez-frontend-hgsyggbcaq-uc.a.run.app
+**Live app:** https://grapez-frontend-493646362074.us-central1.run.app
 
 ## What you need
 

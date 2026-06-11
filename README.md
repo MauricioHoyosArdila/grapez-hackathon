@@ -49,7 +49,7 @@ See the diagram above — source at [`architecture/diagram.svg`](architecture/di
 
 [Video demo link — YouTube]
 
-Live app: https://grapez-frontend-hgsyggbcaq-uc.a.run.app
+Live app: https://grapez-frontend-493646362074.us-central1.run.app
 
 **Want to try it?** Follow the [testing instructions](docs/testing-instructions.md) — works with any Google account that manages a GA4 property + GTM container (test account credentials available in the Devpost submission notes).
 

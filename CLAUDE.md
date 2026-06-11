@@ -1,4 +1,4 @@
-# CLAUDE.md — Grapez Analytics Agents
+﻿# CLAUDE.md — Grapez Analytics Agents
 ## Google for Startups AI Agents Challenge — Hackathon 2026
 
 > **Deadline**: Junio 5, 2026 — **5:00 PM PT** | **Estado detallado**: `STATE.md`
@@ -98,7 +98,7 @@ Objetivo: **Best of Track 1** + aspirar a **Overall Grand Prize**.
 ### Microservicios (Cloud Run — 3 servicios activos en `us-central1`)
 | Servicio | Stack | Para qué |
 |---|---|---|
-| **grapez-frontend** | Next.js 16 (source deploy con buildpacks) | UI del consultor — `https://grapez-frontend-hgsyggbcaq-uc.a.run.app` |
+| **grapez-frontend** | Next.js 16 (source deploy con buildpacks) | UI del consultor — `https://grapez-frontend-493646362074.us-central1.run.app` |
 | **playwright-service** | FastAPI + Uvicorn + Playwright/Chromium (Docker `mcr.microsoft.com/playwright/python:v1.59.0-noble`) | Crawl, screenshots y detección de tracking del sitio del cliente — endpoints `/screenshot`, `/analyze`, `/crawl_site`, `/health` |
 | **brave-mcp-server** | FastMCP + Streamable HTTP | MCP server propio para Brave Search (requisito MCP Track 1) |
 
@@ -148,7 +148,7 @@ https://www.googleapis.com/auth/tagmanager.publish
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │   FRONTEND Next.js 16 ✅ — Cloud Run: grapez-frontend               │
-│   https://grapez-frontend-hgsyggbcaq-uc.a.run.app                   │
+│   https://grapez-frontend-493646362074.us-central1.run.app                   │
 │   OAuth iron-session + Chat UI SSE + A2UIRenderer (6 componentes)   │
 │   app/dev/tokens/ para testing local                                │
 └───────────────────────────────┬─────────────────────────────────────┘
@@ -952,7 +952,7 @@ DEMO_WEBSITE_URL=
 | Servicio | Qué corre | Estado |
 |---|---|---|
 | Vertex AI Agent Engine | Los 4 agentes (un solo deploy del Planner que importa los sub-agentes) — ID `4586839804418719744` | ✅ |
-| Cloud Run `grapez-frontend` | Next.js 16 (source deploy con buildpacks) — `https://grapez-frontend-hgsyggbcaq-uc.a.run.app` | ✅ |
+| Cloud Run `grapez-frontend` | Next.js 16 (source deploy con buildpacks) — `https://grapez-frontend-493646362074.us-central1.run.app` | ✅ |
 | Cloud Run `playwright-service` | FastAPI + Chromium (Docker, 2Gi RAM) — `https://playwright-service-hgsyggbcaq-uc.a.run.app` | ✅ |
 | Cloud Run `brave-mcp-server` | MCP server propio de Brave Search — `https://brave-mcp-server-hgsyggbcaq-uc.a.run.app` | ✅ |
 | Cloud Trace | Observabilidad de los agentes (deploy con `--trace_to_cloud`) | ✅ |
