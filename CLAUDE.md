@@ -1071,7 +1071,7 @@ automáticamente (funciona en Agent Engine, Cloud Run y local con ADC).
 - [x] README en **inglés** (features, setup, arquitectura, diagrama embebido)
 - [ ] Descripción Devpost en **inglés**
 - [ ] Video demo 1-2 minutos en **inglés o subtítulos en inglés** (guión en `docs/demo-script.md`)
-- [ ] Testing instructions en inglés
+- [x] Testing instructions en inglés — `docs/testing-instructions.md` (credenciales de la cuenta de prueba van en las notas privadas del submit de Devpost, NUNCA en el repo)
 - [ ] **Mauro y Juan Camilo** registrados como team members en Devpost for Teams
 
 ---

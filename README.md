@@ -51,6 +51,8 @@ See the diagram above — source at [`architecture/diagram.svg`](architecture/di
 
 Live app: https://grapez-frontend-hgsyggbcaq-uc.a.run.app
 
+**Want to try it?** Follow the [testing instructions](docs/testing-instructions.md) — works with any Google account that manages a GA4 property + GTM container (test account credentials available in the Devpost submission notes).
+
 ## Local Setup
 
 ```bash
