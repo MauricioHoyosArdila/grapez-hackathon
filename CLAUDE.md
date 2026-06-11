@@ -1066,9 +1066,9 @@ automáticamente (funciona en Agent Engine, Cloud Run y local con ADC).
 - [x] **Brave MCP Server propio en Cloud Run** (no estaba planeado — reemplazó al MCPToolset)
 
 **Submission (entregables del hackathon)** — verificar estado en `STATE.md`:
-- [ ] Diagrama de arquitectura PNG en `/architecture/` — directorio aún no existe en el repo
-- [ ] Repo GitHub **público**
-- [ ] README en **inglés** (features, setup, arquitectura)
+- [x] Diagrama de arquitectura en `/architecture/` (diagram.svg fuente + diagram.png para Devpost)
+- [ ] Repo GitHub **público** — barrido de seguridad ✅ completado (jun 10): sin credenciales en código ni historial
+- [x] README en **inglés** (features, setup, arquitectura, diagrama embebido)
 - [ ] Descripción Devpost en **inglés**
 - [ ] Video demo 1-2 minutos en **inglés o subtítulos en inglés** (guión en `docs/demo-script.md`)
 - [ ] Testing instructions en inglés
@@ -1093,7 +1093,9 @@ grapez-hackathon/
 ├── service-account.json   ✅ gitignored
 ├── skills-lock.json       ✅
 │
-├── architecture/          ❌ diagrama.png requerido para Devpost
+├── architecture/
+│   ├── diagram.svg        ✅ fuente del diagrama (editable)
+│   └── diagram.png        ✅ render 2x para Devpost y README
 │
 ├── agents/
 │   ├── __init__.py        ✅

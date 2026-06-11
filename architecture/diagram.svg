@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1520" height="1010" viewBox="0 0 1520 1010" font-family="Segoe UI, Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5f6368"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4285F4"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1520" height="1010" fill="#fafafa"/>
+
+  <!-- Title -->
+  <text x="760" y="44" text-anchor="middle" font-size="26" font-weight="700" fill="#202124">Grapez Analytics Agents — System Architecture</text>
+  <text x="760" y="70" text-anchor="middle" font-size="14" fill="#5f6368">Multi-agent marketing analytics auditor &amp; implementer · Google for Startups AI Agents Challenge 2026 · All components on Google Cloud (us-central1)</text>
+
+  <!-- ============ CONSULTANT ============ -->
+  <circle cx="105" cy="208" r="26" fill="#e8eaed" stroke="#5f6368" stroke-width="2"/>
+  <circle cx="105" cy="199" r="9" fill="#5f6368"/>
+  <path d="M 88 222 a 17 11 0 0 1 34 0 z" fill="#5f6368"/>
+  <text x="105" y="262" text-anchor="middle" font-size="14" font-weight="600" fill="#202124">Grapez</text>
+  <text x="105" y="280" text-anchor="middle" font-size="14" font-weight="600" fill="#202124">Consultant</text>
+
+  <!-- Consultant -> Frontend -->
+  <line x1="140" y1="208" x2="208" y2="208" stroke="#5f6368" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ============ FRONTEND ============ -->
+  <rect x="212" y="108" width="320" height="252" rx="10" fill="#ffffff" stroke="#4285F4" stroke-width="2.5"/>
+  <rect x="212" y="108" width="320" height="40" rx="10" fill="#4285F4"/>
+  <rect x="212" y="128" width="320" height="20" fill="#4285F4"/>
+  <text x="372" y="134" text-anchor="middle" font-size="15" font-weight="700" fill="#ffffff">FRONTEND · Cloud Run</text>
+  <text x="232" y="174" font-size="13.5" font-weight="600" fill="#202124">Next.js 16 (App Router) + Tailwind 4</text>
+  <text x="232" y="198" font-size="13" fill="#3c4043">• Google OAuth 2.0 — iron-session cookie</text>
+  <text x="232" y="220" font-size="13" fill="#3c4043">• Chat UI — SSE streaming</text>
+  <text x="232" y="242" font-size="13" fill="#3c4043">• A2UI Renderer — 6 dynamic components</text>
+  <text x="244" y="262" font-size="12" fill="#5f6368">table · action_card · choice_card · progress</text>
+  <text x="244" y="279" font-size="12" fill="#5f6368">summary_card · image_card</text>
+  <text x="232" y="305" font-size="13" fill="#3c4043">• Human-in-the-loop: every change requires</text>
+  <text x="244" y="323" font-size="13" fill="#3c4043">one-click approval on an action card</text>
+
+  <!-- Google OAuth box -->
+  <rect x="212" y="420" width="320" height="92" rx="10" fill="#ffffff" stroke="#EA4335" stroke-width="2"/>
+  <text x="372" y="446" text-anchor="middle" font-size="14" font-weight="700" fill="#EA4335">Google OAuth 2.0</text>
+  <text x="372" y="470" text-anchor="middle" font-size="12.5" fill="#3c4043">5 scopes: GA4 edit/read · GTM containers /</text>
+  <text x="372" y="488" text-anchor="middle" font-size="12.5" fill="#3c4043">versions / publish — client account consent</text>
+  <line x1="372" y1="420" x2="372" y2="364" stroke="#EA4335" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="5,4"/>
+  <text x="380" y="398" font-size="12" fill="#EA4335">tokens</text>
+
+  <!-- Frontend -> Agent Engine -->
+  <line x1="532" y1="210" x2="608" y2="210" stroke="#4285F4" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <line x1="608" y1="250" x2="532" y2="250" stroke="#4285F4" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <text x="570" y="196" text-anchor="middle" font-size="12" font-weight="600" fill="#4285F4">streamQuery</text>
+  <text x="570" y="240" text-anchor="middle" font-size="12" fill="#4285F4">SSE + A2UI</text>
+  <text x="570" y="276" text-anchor="middle" font-size="11.5" fill="#5f6368">OAuth tokens via</text>
+  <text x="570" y="292" text-anchor="middle" font-size="11.5" fill="#5f6368">session initialState</text>
+
+  <!-- ============ AGENT ENGINE ============ -->
+  <rect x="612" y="98" width="540" height="548" rx="12" fill="#eef3fd" stroke="#1a73e8" stroke-width="3"/>
+  <text x="882" y="130" text-anchor="middle" font-size="16" font-weight="700" fill="#1a73e8">VERTEX AI AGENT ENGINE</text>
+  <text x="882" y="151" text-anchor="middle" font-size="13" fill="#3c4043">Google ADK 2.1 · Gemini 2.5 Flash · single deploy, 4 agents</text>
+
+  <!-- Planner -->
+  <rect x="642" y="170" width="480" height="118" rx="10" fill="#ffffff" stroke="#7c3aed" stroke-width="2.5"/>
+  <text x="882" y="196" text-anchor="middle" font-size="15" font-weight="700" fill="#7c3aed">PLANNER AGENT — Orchestrator</text>
+  <text x="882" y="219" text-anchor="middle" font-size="12.5" fill="#3c4043">5-step consultative flow: know the business → define scope →</text>
+  <text x="882" y="237" text-anchor="middle" font-size="12.5" fill="#3c4043">audit tracking → present results → implement approved fixes</text>
+  <text x="882" y="262" text-anchor="middle" font-size="12.5" font-weight="600" fill="#b3261e">confirm_action() gate — no write executes without consultant approval</text>
+
+  <!-- AgentTool arrows -->
+  <line x1="742" y1="288" x2="742" y2="336" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <line x1="882" y1="288" x2="882" y2="336" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <line x1="1022" y1="288" x2="1022" y2="336" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <text x="882" y="316" text-anchor="middle" font-size="11.5" font-weight="600" fill="#7c3aed">AgentTool (confirmation-scoped)</text>
+
+  <!-- Sub-agents -->
+  <rect x="642" y="340" width="200" height="128" rx="10" fill="#ffffff" stroke="#F9AB00" stroke-width="2.5"/>
+  <text x="742" y="366" text-anchor="middle" font-size="14" font-weight="700" fill="#e37400">GA4 AGENT</text>
+  <text x="742" y="388" text-anchor="middle" font-size="12" fill="#3c4043">17 tools · read + write</text>
+  <text x="742" y="406" text-anchor="middle" font-size="12" fill="#3c4043">audits property, events,</text>
+  <text x="742" y="422" text-anchor="middle" font-size="12" fill="#3c4043">conversions, retention</text>
+  <text x="742" y="444" text-anchor="middle" font-size="11.5" fill="#5f6368">creates conversions &amp; dims</text>
+
+  <rect x="922" y="340" width="200" height="128" rx="10" fill="#ffffff" stroke="#34A853" stroke-width="2.5"/>
+  <text x="1022" y="366" text-anchor="middle" font-size="14" font-weight="700" fill="#188038">GTM AGENT</text>
+  <text x="1022" y="388" text-anchor="middle" font-size="12" fill="#3c4043">22 tools · read + write</text>
+  <text x="1022" y="406" text-anchor="middle" font-size="12" fill="#3c4043">audits tags, triggers, vars</text>
+  <text x="1022" y="422" text-anchor="middle" font-size="12" fill="#3c4043">new workspace + draft only</text>
+  <text x="1022" y="444" text-anchor="middle" font-size="11.5" fill="#5f6368">never touches Default WS</text>
+
+  <rect x="782" y="492" width="200" height="128" rx="10" fill="#ffffff" stroke="#0ea5e9" stroke-width="2.5"/>
+  <text x="882" y="518" text-anchor="middle" font-size="14" font-weight="700" fill="#0369a1">WEB ANALYZER AGENT</text>
+  <text x="882" y="540" text-anchor="middle" font-size="12" fill="#3c4043">detects GTM / GA4 / dataLayer</text>
+  <text x="882" y="558" text-anchor="middle" font-size="12" fill="#3c4043">on the live site · generates</text>
+  <text x="882" y="576" text-anchor="middle" font-size="12.5" font-weight="600" fill="#0369a1">ideal_spec → shared state</text>
+  <text x="882" y="598" text-anchor="middle" font-size="11.5" fill="#5f6368">findings via output_key</text>
+
+  <!-- planner to web analyzer arrow -->
+  <line x1="882" y1="468" x2="882" y2="488" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+
+  <!-- ============ GOOGLE APIS (right) ============ -->
+  <rect x="1212" y="170" width="280" height="298" rx="10" fill="#ffffff" stroke="#5f6368" stroke-width="2"/>
+  <text x="1352" y="198" text-anchor="middle" font-size="14.5" font-weight="700" fill="#202124">GOOGLE MARKETING APIs</text>
+  <rect x="1234" y="216" width="236" height="64" rx="8" fill="#fef7e0" stroke="#F9AB00" stroke-width="1.5"/>
+  <text x="1352" y="242" text-anchor="middle" font-size="13" font-weight="600" fill="#e37400">GA4 Admin API + Data API</text>
+  <text x="1352" y="262" text-anchor="middle" font-size="11.5" fill="#5f6368">properties · events · conversions</text>
+  <rect x="1234" y="294" width="236" height="64" rx="8" fill="#e6f4ea" stroke="#34A853" stroke-width="1.5"/>
+  <text x="1352" y="320" text-anchor="middle" font-size="13" font-weight="600" fill="#188038">Tag Manager API v2</text>
+  <text x="1352" y="340" text-anchor="middle" font-size="11.5" fill="#5f6368">workspaces · tags · versions</text>
+  <text x="1352" y="392" text-anchor="middle" font-size="12" fill="#3c4043">authenticated with the client&#8217;s</text>
+  <text x="1352" y="410" text-anchor="middle" font-size="12" fill="#3c4043">OAuth tokens from session state —</text>
+  <text x="1352" y="428" text-anchor="middle" font-size="12" font-weight="600" fill="#202124">real write access, no mocks</text>
+
+  <!-- GA4/GTM -> APIs arrow (single, from engine edge) -->
+  <line x1="1156" y1="287" x2="1208" y2="287" stroke="#5f6368" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="1182" y="273" text-anchor="middle" font-size="11" fill="#5f6368">API calls</text>
+
+  <!-- ============ CLOUD RUN MICROSERVICES (bottom) ============ -->
+  <rect x="612" y="706" width="260" height="148" rx="10" fill="#ffffff" stroke="#0ea5e9" stroke-width="2.5"/>
+  <text x="742" y="734" text-anchor="middle" font-size="14" font-weight="700" fill="#0369a1">PLAYWRIGHT SERVICE</text>
+  <text x="742" y="754" text-anchor="middle" font-size="12.5" fill="#3c4043">Cloud Run · FastAPI + Chromium</text>
+  <text x="742" y="776" text-anchor="middle" font-size="12" fill="#5f6368">/screenshot · /analyze · /crawl_site</text>
+  <text x="742" y="800" text-anchor="middle" font-size="12" fill="#3c4043">real headless browser: reads dataLayer,</text>
+  <text x="742" y="818" text-anchor="middle" font-size="12" fill="#3c4043">GTM/GA4 IDs, CTAs, full-page screenshots</text>
+
+  <rect x="912" y="706" width="260" height="148" rx="10" fill="#ffffff" stroke="#7c3aed" stroke-width="2.5"/>
+  <text x="1042" y="734" text-anchor="middle" font-size="14" font-weight="700" fill="#7c3aed">BRAVE SEARCH MCP SERVER</text>
+  <text x="1042" y="754" text-anchor="middle" font-size="12.5" fill="#3c4043">Cloud Run · self-built MCP server</text>
+  <text x="1042" y="776" text-anchor="middle" font-size="12" fill="#5f6368">Streamable HTTP · Google OIDC auth</text>
+  <text x="1042" y="800" text-anchor="middle" font-size="12" fill="#3c4043">researches the client&#8217;s business &amp;</text>
+  <text x="1042" y="818" text-anchor="middle" font-size="12" fill="#3c4043">industry before any diagnostic</text>
+
+  <!-- Client website -->
+  <rect x="306" y="706" width="226" height="148" rx="10" fill="#f1f3f4" stroke="#5f6368" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="419" y="740" text-anchor="middle" font-size="14" font-weight="700" fill="#202124">CLIENT&#8217;S WEBSITE</text>
+  <text x="419" y="764" text-anchor="middle" font-size="12.5" fill="#3c4043">any production site</text>
+  <text x="419" y="786" text-anchor="middle" font-size="12.5" fill="#3c4043">(React / Next.js / WordPress…)</text>
+  <text x="419" y="812" text-anchor="middle" font-size="12" fill="#5f6368">crawled &amp; analyzed live</text>
+
+  <!-- Brave API -->
+  <rect x="1212" y="726" width="280" height="108" rx="10" fill="#f1f3f4" stroke="#5f6368" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="1352" y="762" text-anchor="middle" font-size="14" font-weight="700" fill="#202124">BRAVE SEARCH API</text>
+  <text x="1352" y="786" text-anchor="middle" font-size="12.5" fill="#3c4043">public web results for business</text>
+  <text x="1352" y="804" text-anchor="middle" font-size="12.5" fill="#3c4043">context research</text>
+
+  <!-- Arrows bottom -->
+  <line x1="852" y1="620" x2="790" y2="702" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="772" y="664" text-anchor="middle" font-size="11.5" fill="#0369a1">HTTP POST</text>
+  <line x1="932" y1="620" x2="1016" y2="702" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <text x="1014" y="664" text-anchor="middle" font-size="11.5" font-weight="600" fill="#7c3aed">MCP protocol</text>
+  <line x1="612" y1="780" x2="536" y2="780" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="574" y="768" text-anchor="middle" font-size="11.5" fill="#0369a1">headless</text>
+  <text x="574" y="800" text-anchor="middle" font-size="11.5" fill="#0369a1">Chromium</text>
+  <line x1="1172" y1="780" x2="1208" y2="780" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+
+  <!-- ============ FOOTER NOTES ============ -->
+  <rect x="40" y="892" width="1452" height="86" rx="10" fill="#ffffff" stroke="#dadce0" stroke-width="1.5"/>
+  <text x="62" y="920" font-size="12.5" font-weight="700" fill="#202124">Key design decisions</text>
+  <text x="62" y="942" font-size="12" fill="#3c4043">• A2UI protocol (custom React renderer) — the agent drives dynamic UI: diagnostic tables, screenshots, one-click approval cards.   • Human-in-the-loop guardrail in Python, not prompts: write tools verify a session flag only the Planner can set.</text>
+  <text x="62" y="962" font-size="12" fill="#3c4043">• Model Context Protocol — self-built Brave Search MCP server secured with Google OIDC.   • OAuth tokens live only in an encrypted session cookie and agent session state — never persisted in any database.</text>
+</svg>
