@@ -360,7 +360,9 @@ def create_workspace(
     """
     Crea un nuevo workspace en un contenedor GTM.
     SIEMPRE crear un workspace nuevo antes de hacer cualquier cambio — nunca modificar Default Workspace.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -372,9 +374,11 @@ def create_workspace(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -408,7 +412,9 @@ def create_tag(
 ) -> dict:
     """
     Crea un tag en un workspace GTM.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -423,9 +429,11 @@ def create_tag(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -469,7 +477,9 @@ def create_trigger(
 ) -> dict:
     """
     Crea un trigger en un workspace GTM.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -484,9 +494,11 @@ def create_trigger(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -529,7 +541,9 @@ def create_variable(
 ) -> dict:
     """
     Crea una variable en un workspace GTM.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -545,9 +559,11 @@ def create_variable(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -590,7 +606,9 @@ def create_version(
     """
     Crea una versión de borrador del workspace GTM para revisión.
     NUNCA usar publish_version directamente — siempre crear versión primero y esperar aprobación.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -603,9 +621,11 @@ def create_version(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -649,7 +669,9 @@ def rename_gtm_tag(
     """
     Renombra un tag existente en un workspace GTM.
     Usar para marcar elementos mejorados con el prefijo '⚠️ MEJORADO — '.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -662,9 +684,11 @@ def rename_gtm_tag(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -693,7 +717,9 @@ def rename_gtm_trigger(
     """
     Renombra un trigger existente en un workspace GTM.
     Usar para marcar triggers obsoletos con el prefijo '⚠️ MEJORADO — '.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -706,9 +732,11 @@ def rename_gtm_trigger(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -737,7 +765,9 @@ def rename_gtm_variable(
     """
     Renombra una variable existente en un workspace GTM.
     Usar para marcar variables obsoletas con el prefijo '⚠️ MEJORADO — '.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -750,9 +780,11 @@ def rename_gtm_variable(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -780,7 +812,9 @@ def pause_gtm_tag(
     """
     Pausa un tag en un workspace GTM para que deje de dispararse.
     Usar para desactivar tags marcados como '⚠️ MEJORADO' después de que el consultor lo autorice.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         account_id: ID numérico de la cuenta GTM
@@ -792,9 +826,11 @@ def pause_gtm_tag(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)
@@ -827,7 +863,9 @@ def publish_version(
     """
     Publica una versión de borrador del contenedor GTM en producción.
     SOLO usar después de que el consultor haya revisado la versión en la UI de GTM y aprobado explícitamente.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
     ADVERTENCIA: Esta acción es inmediata y afecta el sitio en producción.
 
     Args:
@@ -839,9 +877,11 @@ def publish_version(
         return {
             "blocked": True,
             "reason": "Publicación bloqueada — requiere confirmación explícita del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor confirme que revisó la versión en la UI de GTM y aprueba publicarla en producción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto: el consultor debe revisar la versión en la UI de GTM y aprobar la publicación; el Planner registrará esa aprobación y te invocará de nuevo.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura, para que
+    # una acción confirmada pueda encadenar workspace → variables → triggers → tags.
     try:
         creds = build_credentials(tool_context)
         service = build("tagmanager", "v2", credentials=creds)

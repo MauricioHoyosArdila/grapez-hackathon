@@ -28,10 +28,15 @@ from agents.shared.prompts import (
     IDEAL_SPEC_CONTEXT_SECTION,
 )
 from agents.shared.state_tools import get_ideal_spec_from_state
+from agents.shared.retrying_gemini import RetryingGemini
 
 root_agent = LlmAgent(
-    model="gemini-2.5-flash",
+    model=RetryingGemini(model="gemini-2.5-flash"),
     name="ga4_agent",
+    # ADK guarda la respuesta final en session.state["ga4_findings"] automáticamente.
+    # Evita que el Planner copie el diagnóstico completo como argumento de una tool
+    # (strings grandes en function calls producen "Malformed function call" en Gemini).
+    output_key="ga4_findings",
     generate_content_config=types.GenerateContentConfig(
         http_options=types.HttpOptions(
             retry_options=types.HttpRetryOptions(
@@ -92,6 +97,10 @@ Nomenclatura correcta de eventos: snake_case, formato object_action
 (ej: product_view, cart_add, checkout_start, purchase_complete)
 
 Al implementar cambios:
+- REGLA DURA: confirm_action NO es una tool tuya — pertenece al Planner y NUNCA debes
+  intentar llamarla. La confirmación ya viene registrada en la sesión cuando el Planner
+  te invoca para implementar. Si una write tool devuelve "blocked", NO reintentes:
+  reporta el bloqueo en tu respuesta de texto y termina tu turno.
 - SIEMPRE confirma el nombre exacto del evento/dimensión antes de crear
 - NUNCA borres conversiones sin respaldo previo
 - Crea una conversión a la vez y verifica que se guardó antes de continuar

@@ -314,7 +314,9 @@ def get_data_retention_settings(property_id: str, tool_context: ToolContext) -> 
 def create_conversion_event(property_id: str, event_name: str, tool_context: ToolContext) -> dict:
     """
     Marca un evento como conversión en una propiedad GA4.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         property_id: ID numérico de la propiedad GA4
@@ -324,9 +326,10 @@ def create_conversion_event(property_id: str, event_name: str, tool_context: Too
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura.
     try:
         creds = build_credentials(tool_context)
         client = AnalyticsAdminServiceClient(credentials=creds)
@@ -357,7 +360,9 @@ def create_custom_dimension(
 ) -> dict:
     """
     Crea una dimensión personalizada en una propiedad GA4.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         property_id: ID numérico de la propiedad GA4
@@ -370,9 +375,10 @@ def create_custom_dimension(
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura.
     try:
         scope_enum = CustomDimension.DimensionScope[scope.upper()]
     except KeyError:
@@ -408,7 +414,9 @@ def create_custom_dimension(
 def update_data_retention(property_id: str, months: int, tool_context: ToolContext) -> dict:
     """
     Actualiza el período de retención de datos de eventos en GA4.
-    GUARDRAIL: Solo ejecutar después de confirmación explícita del consultor via confirm_action().
+    GUARDRAIL: Requiere confirmación previa del consultor, registrada en sesión por el Planner.
+    NUNCA llames confirm_action() — esa tool pertenece al Planner y NO existe en este agente.
+    Si esta operación sale bloqueada, reporta el bloqueo en tu respuesta de texto.
 
     Args:
         property_id: ID numérico de la propiedad GA4
@@ -418,9 +426,10 @@ def update_data_retention(property_id: str, months: int, tool_context: ToolConte
         return {
             "blocked": True,
             "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-            "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción.",
+            "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto; el Planner pedirá la aprobación del consultor y te invocará de nuevo para ejecutar la operación.",
         }
-    tool_context.state["implementation_confirmed"] = False
+    # La confirmación se consume al terminar la invocación del sub-agente
+    # (ConfirmationScopedAgentTool en el Planner) — no por escritura.
     if months not in (2, 14):
         return {"error": "El período de retención debe ser 2 o 14 meses."}
 

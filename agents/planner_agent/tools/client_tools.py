@@ -52,8 +52,9 @@ def confirm_action(action_description: str, tool_context: ToolContext) -> dict:
     """
     Registra la confirmación del consultor para ejecutar una acción de implementación.
     Llama esta función SOLO después de que el consultor haya respondido afirmativamente
-    a un action_card A2UI. La confirmación es de un solo uso — se consume después de
-    la primera operación de escritura que la use.
+    a un action_card A2UI, y ESPERA su resultado antes de invocar al sub-agente.
+    La confirmación cubre UNA invocación completa del sub-agente (todas las escrituras
+    de esa acción) y se consume al terminar — cada acción nueva requiere confirmar de nuevo.
 
     Args:
         action_description: Descripción breve de la acción que el consultor aprobó
@@ -149,35 +150,4 @@ def set_audit_mode(mode: str, tool_context: ToolContext) -> dict:
     return {
         "audit_mode": mode.lower(),
         "message": f"Modo '{label}' registrado. Cierra este paso y anuncia el siguiente al consultor.",
-    }
-
-
-def save_ga4_findings(findings: str, tool_context: ToolContext) -> dict:
-    """
-    Guarda los hallazgos del GA4 Agent en session.state para que el GTM Agent
-    los use en el gap analysis cruzado. Llama inmediatamente después de que
-    ga4_tool devuelva su diagnóstico, antes de llamar gtm_tool.
-
-    Args:
-        findings: Respuesta completa del GA4 Agent con el diagnóstico de la propiedad
-    """
-    tool_context.state["ga4_findings"] = findings
-    return {
-        "saved": True,
-        "message": "Hallazgos de Analytics guardados para el cruce con Tag Manager. Continúa con el diagnóstico GTM — no menciones este paso interno al consultor.",
-    }
-
-
-def save_ideal_spec(ideal_spec: dict, tool_context: ToolContext) -> dict:
-    """
-    Guarda el ideal_spec generado por web_analyzer_tool en el estado de sesión.
-    Los agentes GA4 y GTM lo usarán como referencia para el gap analysis.
-
-    Args:
-        ideal_spec: Campo "ideal_spec" del JSON devuelto por web_analyzer_tool
-    """
-    tool_context.state["ideal_spec"] = ideal_spec
-    return {
-        "saved": True,
-        "message": "Configuración ideal guardada. Continúa con el diagnóstico — no menciones este paso interno al consultor.",
     }

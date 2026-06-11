@@ -15,6 +15,8 @@ from agents.ga4_agent.agent import root_agent as ga4_agent
 from agents.gtm_agent.agent import root_agent as gtm_agent
 from agents.web_analyzer_agent.agent import root_agent as web_analyzer_agent
 from agents.web_analyzer_agent.tools.playwright_tools import screenshot_site, crawl_site
+from agents.shared.retrying_gemini import RetryingGemini
+from agents.shared.confirmation_scoped_agent_tool import ConfirmationScopedAgentTool
 from agents.shared.prompts import (
     A2UI_FORMAT_EXAMPLES,
     COMMUNICATION_RULES,
@@ -31,16 +33,18 @@ from .tools.client_tools import (
     confirm_action,
     set_business_context,
     set_audit_mode,
-    save_ideal_spec,
-    save_ga4_findings,
 )
 
-ga4_tool = AgentTool(agent=ga4_agent)
-gtm_tool = AgentTool(agent=gtm_agent)
+# GA4 y GTM hacen escrituras: la confirmación del consultor cubre UNA invocación
+# completa (todas las escrituras de esa acción) y se consume al terminar.
+ga4_tool = ConfirmationScopedAgentTool(agent=ga4_agent)
+gtm_tool = ConfirmationScopedAgentTool(agent=gtm_agent)
 web_analyzer_tool = AgentTool(agent=web_analyzer_agent)
 
 root_agent = LlmAgent(
-    model="gemini-2.5-flash",
+    # RetryingGemini reintenta cuando el modelo devuelve un turno vacío tras un
+    # function response grande (el turno vacío congela la conversación).
+    model=RetryingGemini(model="gemini-2.5-flash"),
     name="planner_agent",
     generate_content_config=types.GenerateContentConfig(
         http_options=types.HttpOptions(
@@ -439,7 +443,9 @@ NUNCA diagnostiques sin confirmar propiedad GA4 y contenedor GTM concretos.
    Inclúyelos directamente en el ideal_spec sin inferir.
 
    Devuelve: (1) estado actual del tracking, (2) ideal_spec completo para este cliente."
-3. Llama save_ideal_spec(ideal_spec) con el campo "ideal_spec" del JSON devuelto.
+3. El resultado queda guardado AUTOMÁTICAMENTE en la sesión — los agentes GA4 y GTM lo
+   leen con get_ideal_spec_from_state(). NUNCA copies el ideal_spec ni el diagnóstico
+   como argumento de ninguna función — no existe ninguna tool para guardarlos.
 4. Si hay ambigüedades en el ideal_spec, FILTRA antes de preguntar:
    - Ambigüedad TÉCNICA (dataLayer, DOM, eventos de un proveedor, iframes, redirects,
      parámetros): NO se la preguntes al consultor — no es técnico y no puede responderla.
@@ -474,7 +480,9 @@ NUNCA diagnostiques sin confirmar propiedad GA4 y contenedor GTM concretos.
    Tipo de negocio: [business_type].
    Llama get_ideal_spec_from_state() para el gap analysis.
    [Si hubo respuestas a ambigüedades: inclúyelas en 1-2 líneas]"
-3. Cuando GA4 responda: llama save_ga4_findings() con la respuesta completa.
+3. Cuando GA4 responda: sus hallazgos quedan guardados AUTOMÁTICAMENTE en la sesión
+   (el GTM Agent los lee con get_ga4_findings_from_state()). NO los copies a ninguna
+   función — continúa directo a 3c.
 
 ### 3c — Diagnóstico GTM y cierre del paso
 
@@ -551,13 +559,22 @@ Si audit_mode es "auditoria_implementacion": procede a 5a (espera confirmación 
 Para cada acción, en orden:
 1. Presenta action_card A2UI con qué cambia, en qué propiedad/contenedor, impacto esperado
 2. Espera confirmación explícita ("Confirmo", "Sí", "Hazlo", "Procede")
-3. Llama confirm_action(action_description="descripción concisa")
-4. Llama el agente correspondiente con instrucción específica + IDs concretos
+3. Llama confirm_action(action_description="descripción concisa") y ESPERA su resultado —
+   NUNCA la llames en paralelo con el agente
+4. Llama el agente correspondiente con instrucción específica + IDs concretos.
+   La confirmación cubre TODA esa invocación: el sub-agente puede encadenar las
+   escrituras que la acción necesite (ej. workspace + variables + triggers + tags).
+   Al terminar la invocación la confirmación se consume — la siguiente acción
+   requiere confirm_action() de nuevo.
 5. Reporta el resultado
 6. Presenta la siguiente action_card si hay más acciones pendientes
 
+Si el sub-agente reporta una operación bloqueada por falta de confirmación, NO es un
+error de permisos de Google: significa que invocaste al agente sin confirm_action()
+previo. Llama confirm_action() (si el consultor ya aprobó) y reintenta la invocación.
+
 NUNCA llames confirm_action() sin respuesta afirmativa del consultor.
-NUNCA implementes múltiples acciones en una sola confirmación.
+NUNCA implementes múltiples acciones (action_cards distintas) en una sola confirmación.
 NUNCA llames ga4_tool o gtm_tool sin incluir property_id o container_id específico.
 
 El frontend envía la confirmación como "Confirm: [título de la acción]" y el rechazo como
@@ -615,8 +632,6 @@ Adapta la tabla A2UI al alcance real.
         load_client_tokens,
         set_business_context,
         set_audit_mode,
-        save_ideal_spec,
-        save_ga4_findings,
         confirm_action,
         screenshot_site,
         crawl_site,

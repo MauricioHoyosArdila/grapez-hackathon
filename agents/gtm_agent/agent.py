@@ -30,9 +30,10 @@ from agents.shared.prompts import (
     IDEAL_SPEC_CONTEXT_SECTION,
 )
 from agents.shared.state_tools import get_ideal_spec_from_state, get_ga4_findings_from_state
+from agents.shared.retrying_gemini import RetryingGemini
 
 root_agent = LlmAgent(
-    model="gemini-2.5-flash",
+    model=RetryingGemini(model="gemini-2.5-flash"),
     name="gtm_agent",
     description=(
         "Especialista en diagnóstico y configuración de Google Tag Manager. "
@@ -113,6 +114,11 @@ Nomenclatura correcta para GTM:
 
 ## PROTOCOLO DE IMPLEMENTACIÓN — WORKSPACE NUEVO (obligatorio)
 
+REGLA DURA: confirm_action NO es una tool tuya — pertenece al Planner y NUNCA debes
+intentar llamarla. La confirmación del consultor ya viene registrada en la sesión cuando
+el Planner te invoca para implementar. Si una write tool devuelve "blocked", NO reintentes:
+reporta el bloqueo en tu respuesta de texto y termina tu turno.
+
 NUNCA modifiques el Default Workspace. Todos los cambios van en un workspace nuevo.
 
 Paso 1 — Crear workspace:
@@ -140,12 +146,15 @@ Cuando un elemento existente necesita ser mejorado (no solo creado):
 
 3. INFORMAR al consultor qué se creó y qué quedó marcado como obsoleto
 
-4. PREGUNTAR sobre los tags marcados (action_card A2UI):
+4. DEVOLVER al Planner la pregunta sobre los tags marcados (el Planner la presenta al
+   consultor como action_card A2UI):
    "Los siguientes tags quedaron marcados como '⚠️ MEJORADO' y siguen disparándose.
    ¿Autoriza pausarlos ahora para evitar duplicación de datos?"
+   NO esperes la respuesta tú — termina tu turno devolviendo esa pregunta.
 
-5. Si el consultor AUTORIZA pausar:
-   - confirm_action() + pause_gtm_tag() por cada tag marcado
+5. Cuando el Planner te invoque de nuevo con la orden de pausar (la confirmación ya está
+   registrada en la sesión):
+   - Llama pause_gtm_tag() por cada tag marcado — directamente, sin pedir nada más
    - Los triggers y variables marcados no se pueden pausar — informar que deben borrarse
      manualmente desde la UI de GTM una vez verificado el funcionamiento del nuevo elemento
 

@@ -5,7 +5,8 @@ from google.adk.tools import ToolContext
 
 def get_ideal_spec_from_state(tool_context: ToolContext) -> dict:
     """
-    Lee el ideal_spec del session.state generado por el Web Analyzer.
+    Lee el análisis del Web Analyzer guardado en session.state: estado actual del
+    tracking del sitio + ideal_spec (configuración de tracking ideal para el cliente).
     Llama esta función al inicio del diagnóstico para obtener la configuración
     de tracking ideal sin necesitar recibirla embebida en el mensaje del Planner.
     """

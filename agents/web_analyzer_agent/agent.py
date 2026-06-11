@@ -10,11 +10,16 @@ from google.adk.agents import LlmAgent
 from google.genai import types
 
 from agents.shared.prompts import GA4_STANDARDS, GTM_STANDARDS
+from agents.shared.retrying_gemini import RetryingGemini
 from agents.web_analyzer_agent.tools.playwright_tools import screenshot_site, analyze_site
 
 root_agent = LlmAgent(
-    model="gemini-2.5-flash",
+    model=RetryingGemini(model="gemini-2.5-flash"),
     name="web_analyzer_agent",
+    # ADK guarda la respuesta final (current_state + ideal_spec) en
+    # session.state["ideal_spec"] automáticamente — el Planner no debe copiarla
+    # como argumento de una tool (strings grandes rompen el function calling de Gemini).
+    output_key="ideal_spec",
     generate_content_config=types.GenerateContentConfig(
         http_options=types.HttpOptions(
             retry_options=types.HttpRetryOptions(

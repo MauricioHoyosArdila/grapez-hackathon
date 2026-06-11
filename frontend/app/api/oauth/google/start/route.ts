@@ -4,6 +4,9 @@ const SCOPES = [
   "https://www.googleapis.com/auth/analytics.edit",
   "https://www.googleapis.com/auth/analytics.readonly",
   "https://www.googleapis.com/auth/tagmanager.edit.containers",
+  // Requerido por create_version — GTM separa la gestión de versiones del
+  // scope de edición de contenedores. Sin esto: "Insufficient Permission".
+  "https://www.googleapis.com/auth/tagmanager.edit.containerversions",
   "https://www.googleapis.com/auth/tagmanager.publish",
   "openid",
   "email",
