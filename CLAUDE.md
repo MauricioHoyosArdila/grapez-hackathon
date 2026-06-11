@@ -34,7 +34,7 @@ El servicio "Ecosistema de Medición" de Grapez tarda 2-3 semanas por cliente co
 ### Requisitos técnicos obligatorios
 - [x] Usar **Gemini API** (directo o via Vertex AI) — `gemini-2.5-flash` via Vertex AI
 - [x] Usar **ADK** (Agent Development Kit) — `google-adk==2.1.0`
-- [ ] Desplegar en **Google Cloud Platform** — **pendiente (Semana 5 crítico)**
+- [x] Desplegar en **Google Cloud Platform** — Agent Engine (agentes) + Cloud Run (frontend, Playwright Service, Brave MCP Server)
 - [x] Proyecto **nuevo** (no adaptación de proyecto existente)
 
 ### Criterios de evaluación (total 100 pts)
@@ -56,9 +56,9 @@ El servicio "Ecosistema de Medición" de Grapez tarda 2-3 semanas por cliente co
 ### MCP — obligatorio en Track 1
 Track 1 exige explícitamente: *"Show us how your agent uses the **Model Context Protocol (MCP)** to securely connect to external tools."*
 
-- **[INTEGRADO]** **Brave Search MCP** via `MCPToolset` — Planner Agent lo usa en PASO 2 para investigar el negocio del cliente (URL, industria, competidores) antes del diagnóstico
-- **[PENDIENTE]** skill `analytics-tracking` de MCP Market — añadiría mayor profundidad técnica; prioridad baja dado el deadline
-- Documentar en Devpost: *"We use the Model Context Protocol (MCP) via ADK's MCPToolset to connect Brave Search, enabling the Planner Agent to research the client's business context and industry before running any diagnostic."*
+- **[INTEGRADO]** **Brave Search MCP Server propio** deployado en Cloud Run (`brave_mcp_server/` — FastMCP + Streamable HTTP, autenticado con Google OIDC identity tokens). La tool `brave_web_search` del Planner ([agents/planner_agent/tools/brave_search.py](agents/planner_agent/tools/brave_search.py)) abre una `ClientSession` MCP por request; si el MCP server no responde, hace fallback HTTP directo a la Brave API. El Planner lo usa en el PASO 1 para investigar el negocio del cliente antes del diagnóstico.
+- **[DESCARTADO]** skill `analytics-tracking` de MCP Market — no se integró; el requisito MCP del Track 1 lo cubre el Brave MCP Server
+- Documentar en Devpost: *"We deployed our own MCP server (Brave Search, Streamable HTTP on Cloud Run, secured with Google OIDC) which the Planner Agent connects to via the MCP Python client to research the client's business context before running any diagnostic."*
 
 ### Premio — contexto Colombia
 | Premio | Monto | Cómo ganar |
@@ -81,29 +81,42 @@ Objetivo: **Best of Track 1** + aspirar a **Overall Grand Prize**.
 
 ## 3. Stack Técnico
 
-### Backend — Agentes
+### Backend — Agentes (deployados en Vertex AI Agent Engine, ID `4586839804418719744`)
 | Tecnología | Versión / Detalles | Para qué |
 |---|---|---|
 | **Python** | 3.11+ | Lenguaje de todos los agentes |
-| **Google ADK** | `google-adk` latest | Framework de agentes |
-| **Gemini 3.5 Flash** | `gemini-3.5-flash` | Modelo de todos los agentes |
-| **Gemini Enterprise Agent Platform** | Agent Runtime (ex-Agent Engine) | Deploy y hosting de agentes |
-| **Agents CLI** | `google-agents-cli` latest | Scaffold, eval, deploy y publish de agentes |
-| **Agent Studio** | UI visual en Gemini Enterprise | Prototipado de instrucciones del sistema |
-| **Playwright (Python)** | `playwright` latest | Web Analyzer — crawl sitios |
-| **google-analytics-admin** | latest | GA4 Admin API (read+write) |
-| **google-analytics-data** | latest | GA4 Data API (read) |
-| **google-auth** | latest | OAuth2 con refresh tokens |
-| **Firestore** | via `google-cloud-firestore` | Base de datos (clientes, tokens) |
+| **Google ADK** | `google-adk==2.1.0` | Framework de agentes — `LlmAgent` + `AgentTool` + plain function tools |
+| **Gemini 2.5 Flash** | `gemini-2.5-flash` via Vertex AI | Modelo de los 4 agentes (ver 19.3 — 3.5 aún no disponible en el proyecto) |
+| **Vertex AI Agent Engine** | deploy via `adk deploy agent_engine` | Hosting de los agentes (script: `scripts/deploy-agents.ps1`) |
+| **mcp** | ≥1.27.2 | Cliente MCP — conexión al Brave MCP Server |
+| **httpx** | ≥0.27.0 | Llamadas HTTP al Playwright Service |
+| **google-analytics-admin** | ≥0.22.0 | GA4 Admin API (read+write) |
+| **google-analytics-data** | ≥0.18.0 | GA4 Data API (read) |
+| **google-api-python-client** | ≥2.126.0 | GTM API v2 (read+write) |
+| **google-auth** | ≥2.29.0 | OAuth2 con refresh tokens |
+
+### Microservicios (Cloud Run — 3 servicios activos en `us-central1`)
+| Servicio | Stack | Para qué |
+|---|---|---|
+| **grapez-frontend** | Next.js 16 (source deploy con buildpacks) | UI del consultor — `https://grapez-frontend-hgsyggbcaq-uc.a.run.app` |
+| **playwright-service** | FastAPI + Uvicorn + Playwright/Chromium (Docker `mcr.microsoft.com/playwright/python:v1.59.0-noble`) | Crawl, screenshots y detección de tracking del sitio del cliente — endpoints `/screenshot`, `/analyze`, `/crawl_site`, `/health` |
+| **brave-mcp-server** | FastMCP + Streamable HTTP | MCP server propio para Brave Search (requisito MCP Track 1) |
 
 ### Frontend
 | Tecnología | Versión | Para qué |
 |---|---|---|
-| **Next.js** | 15+ App Router | Frontend principal |
+| **Next.js** | 16.2.6 App Router | Frontend principal |
+| **React** | 19.2.4 | UI |
 | **TypeScript** | 5+ | Tipado |
-| **Tailwind CSS** | 3+ | Estilos |
-| **A2UI Client** | ver spec en sección 7 | Renderizar UI dinámica del agente |
-| **Cloud Run** | Google Cloud | Hosting del frontend |
+| **Tailwind CSS** | 4 | Estilos |
+| **iron-session** | 8.0.4 | Tokens OAuth + clientes creados en cookie cifrada |
+| **A2UI Client** | renderer custom (ver sección 7) | Renderizar UI dinámica del agente — 6 tipos de componente |
+| **undici** | ≥7 | Dispatcher sin timeouts para el streaming SSE del Agent Engine |
+
+> **NO se usan en producción**: Firestore y Secret Manager. Quedaron descartados para el demo —
+> los tokens OAuth y los clientes creados viven en la cookie iron-session (ver 19.8 y 19.13).
+> Las dependencias `google-cloud-firestore` / `google-cloud-secret-manager` siguen en
+> requirements.txt pero ningún código las invoca.
 
 ### APIs externas (Google)
 | API | Scopes OAuth | Operaciones |
@@ -117,75 +130,90 @@ Objetivo: **Best of Track 1** + aspirar a **Overall Grand Prize**.
 https://www.googleapis.com/auth/analytics.edit
 https://www.googleapis.com/auth/analytics.readonly
 https://www.googleapis.com/auth/tagmanager.edit.containers
+https://www.googleapis.com/auth/tagmanager.edit.containerversions
 https://www.googleapis.com/auth/tagmanager.publish
 ```
+
+> `tagmanager.edit.containerversions` es obligatorio para `create_version` — GTM separa
+> la gestión de versiones del scope de edición. Sin él la API devuelve "Insufficient
+> Permission" aunque la cuenta sea propietaria del contenedor (detectado jun 10, 2026).
 
 ---
 
 ## 4. Arquitectura del Sistema
 
-> **Estado al 1 junio 2026** — Leyenda: ✅ Implementado | ⚠️ Parcial/inferencia | ❌ Pendiente
+> **Estado al 10 junio 2026** — TODO DEPLOYADO Y FUNCIONANDO end-to-end.
+> Leyenda: ✅ Implementado y en producción
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│   FRONTEND Next.js 15 — ✅ Construido | ❌ No deployado/conectado    │
-│   OAuth iron-session + Chat UI SSE + A2UIRenderer (5 componentes)   │
+│   FRONTEND Next.js 16 ✅ — Cloud Run: grapez-frontend               │
+│   https://grapez-frontend-hgsyggbcaq-uc.a.run.app                   │
+│   OAuth iron-session + Chat UI SSE + A2UIRenderer (6 componentes)   │
 │   app/dev/tokens/ para testing local                                │
 └───────────────────────────────┬─────────────────────────────────────┘
-                                │ ❌ HTTP/SSE — agentes no deployados aún
+                                │ ✅ HTTP/SSE → streamQuery del Agent Engine
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│   PLANNER AGENT ✅ (gemini-2.5-flash)                               │
-│   LlmAgent + AgentTool (GA4/GTM/Web) + Brave Search MCPToolset ✅   │
-│   7 tools propias: get_session_info, load_client_tokens,            │
-│   set_business_context, set_audit_mode, confirm_action,             │
-│   save_ideal_spec, save_ga4_findings                                │
-└──────┬────────────┬────────────────────────────────────────────────┘
-       │ AgentTool  │ AgentTool     │ AgentTool     │ MCPToolset
+│   VERTEX AI AGENT ENGINE ✅ — ID 4586839804418719744 (us-central1)  │
+│   PLANNER AGENT (gemini-2.5-flash)                                  │
+│   LlmAgent + AgentTool (GA4/GTM/Web) + brave_web_search (MCP)       │
+│   + screenshot_site / crawl_site (→ Playwright Service)             │
+│   5 tools propias: get_session_info, load_client_tokens,            │
+│   set_business_context, set_audit_mode, confirm_action              │
+│   (ideal_spec y ga4_findings se guardan solos via output_key)       │
+└──────┬────────────┬───────────────┬───────────────┬─────────────────┘
+       │ AgentTool  │ AgentTool     │ AgentTool     │ MCP client (per-request)
        ▼            ▼               ▼               ▼
-  ┌──────────┐ ┌──────────┐  ┌──────────────┐  ┌──────────────┐
-  │ GA4 ✅   │ │ GTM ✅   │  │ WEB ANALYZER │  │ Brave Search │
-  │ 13 read  │ │ 10 read  │  │ ⚠️ instruc.  │  │ MCP ✅       │
-  │  3 write │ │ 10 write │  │ ✅ completas │  │ Investiga    │
-  │  1 shared│ │  2 shared│  │ ❌ tools=[]  │  │ negocio del  │
-  │  total:17│ │  total:22│  │ Modo: infere │  │ cliente      │
-  └──────┬───┘ └──────┬───┘  │ + Brave ctx  │  └──────────────┘
-         │             │      │ ❌ Playwright │
-    GA4 Admin API   GTM API   │    Service   │
-    GA4 Data API    v2 Python  └──────────────┘
-    (google-analytics-admin/data)
-    Tokens via ToolContext.state ← iron-session (frontend)
+  ┌──────────┐ ┌──────────┐  ┌──────────────┐  ┌──────────────────┐
+  │ GA4 ✅   │ │ GTM ✅   │  │ WEB ANALYZER │  │ brave-mcp-server │
+  │ 13 read  │ │ 10 read  │  │ ✅ 2 tools:  │  │ ✅ Cloud Run     │
+  │  3 write │ │ 10 write │  │ screenshot_  │  │ FastMCP +        │
+  │  1 shared│ │  2 shared│  │ site,        │  │ Streamable HTTP  │
+  │  total:17│ │  total:22│  │ analyze_site │  │ + OIDC auth      │
+  └──────┬───┘ └──────┬───┘  └──────┬───────┘  └──────────────────┘
+         │            │             │ HTTP POST
+    GA4 Admin API  GTM API    ┌─────▼──────────────┐
+    GA4 Data API   v2 Python  │ playwright-service │
+    (google-analytics-        │ ✅ Cloud Run       │
+     admin/data)              │ FastAPI + Chromium │
+                              │ /screenshot        │
+    Tokens via                │ /analyze           │
+    ToolContext.state         │ /crawl_site        │
+    ← iron-session (frontend) └────────────────────┘
 
 [DESCARTADO DEL SCOPE]: Implementation Agent — las operaciones write
 están directamente en GA4 Agent y GTM Agent, activadas por confirm_action()
-
-INFRAESTRUCTURA DE DEPLOY (❌ pendiente — Semana 5 crítico):
-  Agent Runtime (Gemini Enterprise Agent Platform) ← todos los agentes
-  Cloud Run  ← frontend Next.js + Playwright Service (si se construye)
-  Firestore  ← arquitectura definida, no wired para demo
-  Secret Manager ← arquitectura definida, no configurado
+[DESCARTADO DEL SCOPE]: Firestore y Secret Manager — no se usan; tokens y
+clientes viven en la cookie iron-session (ver 19.8 y 19.13)
 ```
 
-### Flujo actual (funcionando localmente con `adk web agents/planner_agent`)
-1. Consultor abre chat → Planner recibe objetivo
-2. Planner pregunta modo (solo auditoría o auditoría+implementación)
-3. Planner recopila URL del sitio → Brave Search investiga el negocio del cliente
-4. Planner confirma tipo de negocio y conversiones clave
-5. Planner llama web_analyzer_tool → genera ideal_spec (modo inferencia, marca "[INFERIDO]")
+### Flujo actual (producción end-to-end; también local con `adk web agents/planner_agent`)
+1. Consultor abre chat → Planner recibe objetivo + tokens OAuth via initialState
+2. Planner investiga en silencio: brave_web_search (MCP) + crawl_site (Playwright Service)
+3. Planner presenta mapa del sitio (tabla A2UI + image_card con screenshot real) y mapea
+   el funnel de conversión con choice_cards (screenshot_site automático por cada URL mencionada)
+4. Planner confirma modo de trabajo (choice_card) → set_audit_mode()
+5. Planner llama web_analyzer_tool → analyze_site detecta GTM ID, GA4 ID y dataLayer reales
+   → la respuesta (current_state + ideal_spec) se guarda sola en state via output_key
 6. Planner llama ga4_tool → diagnóstico completo con GA4 Admin API + Data API reales
-7. Planner guarda findings en state → llama gtm_tool con contexto cruzado
-8. GTM Agent lee ideal_spec + GA4 findings → diagnóstico con GTM API v2 real
-9. Planner consolida → genera tabla A2UI + action cards con hallazgos
-10. Si modo implementación: consultor confirma acción → confirm_action() setea flag
-11. GA4/GTM Agent ejecuta write operation con verificación del flag
-12. Reporte final A2UI summary_card
+   → findings se guardan solos en state via output_key
+7. Planner llama gtm_tool → GTM Agent lee ideal_spec + GA4 findings del state
+   (get_ideal_spec_from_state / get_ga4_findings_from_state) → gap analysis cruzado
+8. Planner consolida → genera tabla A2UI + action cards con hallazgos
+9. Si modo implementación: consultor confirma acción → confirm_action() setea flag
+10. GA4/GTM Agent ejecuta write operation con verificación del flag
+11. Reporte final A2UI summary_card
 
-### Playwright Service — arquitectura definida, pendiente de construir
-Agent Runtime no tiene Chromium (sandbox Python puro). Solución diseñada:
-- **Web Analyzer Agent** llama via HTTP POST a **Playwright Service** en Cloud Run
-- **Playwright Service**: FastAPI + Docker (`mcr.microsoft.com/playwright/python`) + Chromium
-- Requiere `--memory=2Gi` en Cloud Run (Chromium consume 500MB-1GB)
-- **Estado**: arquitectura completa en CLAUDE.md, directorio `playwright_service/` no creado aún
+### Playwright Service — ✅ construido y deployado
+Agent Engine no tiene Chromium (sandbox Python puro). Solución en producción:
+- **Web Analyzer Agent** (y el Planner directamente para screenshots/crawl) llaman via
+  HTTP POST al **Playwright Service** en Cloud Run (`playwright_service/`)
+- **Stack**: FastAPI + Uvicorn + Playwright, imagen `mcr.microsoft.com/playwright/python:v1.59.0-noble`
+- **Endpoints**: `/screenshot` (screenshot + elementos interactivos), `/analyze` (GTM/GA4 IDs,
+  dataLayer, errores de tracking), `/crawl_site` (home + hasta 6 páginas internas priorizadas
+  por señales de conversión), `/screenshots/{id}` (sirve los PNG), `/health`
+- URL: `https://playwright-service-hgsyggbcaq-uc.a.run.app` (env `PLAYWRIGHT_SERVICE_URL`)
 
 ---
 
@@ -196,7 +224,7 @@ Agent Runtime no tiene Chromium (sandbox Python puro). Solución diseñada:
 ### 5.1 Planner Agent (Orchestrador) ✅
 **Archivo**: [agents/planner_agent/agent.py](agents/planner_agent/agent.py)
 **Modelo**: `gemini-2.5-flash`
-**Rol**: Punto de entrada. Conduce al consultor por un flujo de 9 pasos: bienvenida → contexto → scope → análisis web → diagnóstico cruzado → preguntas → tabla A2UI → implementación → summary.
+**Rol**: Punto de entrada. Conduce al consultor por un flujo de 5 pasos (los mismos que ve el consultor, en inglés en la UI): (1) conocer tu negocio — investigación con Brave + crawl + mapeo del funnel, (2) decidir cómo trabajamos — modo + scope GA4/GTM, (3) revisar tu medición — web analyzer + GA4 + GTM, (4) resultados — tabla A2UI + action cards, (5) mejoras y resumen final.
 
 **Herramientas propias** (en [agents/planner_agent/tools/client_tools.py](agents/planner_agent/tools/client_tools.py)):
 - `get_session_info()` — verifica presencia de tokens OAuth en session.state
@@ -204,14 +232,22 @@ Agent Runtime no tiene Chromium (sandbox Python puro). Solución diseñada:
 - `set_business_context(business_type, website_url, key_conversions)` — tipos válidos: ecommerce, lead_generation, saas, marketplace, media, otro
 - `set_audit_mode(mode)` — "auditoria" (solo lectura) o "auditoria_implementacion"
 - `confirm_action(action_description)` — setea `implementation_confirmed=True` en state
-- `save_ideal_spec(ideal_spec)` — guarda output del Web Analyzer en state
-- `save_ga4_findings(findings)` — guarda diagnóstico GA4 en state para que GTM lo lea
+
+> **Nota (jun 10, 2026)**: `save_ideal_spec` y `save_ga4_findings` fueron **eliminadas**.
+> Pasar el diagnóstico completo como argumento de función producía "Malformed function call"
+> en Gemini (strings grandes rompen el function calling). Ahora GA4 Agent tiene
+> `output_key="ga4_findings"` y Web Analyzer `output_key="ideal_spec"` — ADK guarda su
+> respuesta final en `session.state` automáticamente y `AgentTool` propaga el state_delta
+> a la sesión del Planner. GTM/GA4 lo leen con las tools de `agents/shared/state_tools.py`.
 
 **Sub-agentes como AgentTool**:
 - `ga4_tool = AgentTool(agent=ga4_agent)` — GA4 completo
 - `gtm_tool = AgentTool(agent=gtm_agent)` — GTM completo
 - `web_analyzer_tool = AgentTool(agent=web_analyzer_agent)` — generador de ideal_spec
-- `brave_search_toolset = MCPToolset(...)` — Brave Search MCP para investigar el negocio
+
+**Tools directas adicionales del Planner**:
+- `brave_web_search(query)` ([tools/brave_search.py](agents/planner_agent/tools/brave_search.py)) — cliente MCP per-request al Brave MCP Server en Cloud Run (Streamable HTTP + OIDC), con fallback HTTP directo a la Brave API en desarrollo local
+- `screenshot_site(url)` y `crawl_site(url)` (de [web_analyzer_agent/tools/playwright_tools.py](agents/web_analyzer_agent/tools/playwright_tools.py)) — el Planner las usa directamente en el Paso 1 para la investigación previa y el mapeo del funnel con screenshots reales
 
 ---
 
@@ -251,7 +287,10 @@ get_ideal_spec_from_state()  # lee session.state["ideal_spec"] para gap analysis
 
 **Guardrails implementados**:
 - Todas las write tools verifican `implementation_confirmed` flag antes de ejecutar
-- Flag se consume (→ False) después de cada operación — una confirmación = una acción
+- El flag se consume al TERMINAR la invocación del sub-agente (`ConfirmationScopedAgentTool`
+  en [agents/shared/confirmation_scoped_agent_tool.py](agents/shared/confirmation_scoped_agent_tool.py)) —
+  una confirmación = una acción completa, que puede encadenar varias escrituras
+  (ej. GTM: workspace + variables + triggers + tags en una sola confirmación)
 - Límites GA4 enforced en instruction: event names ≤40 chars, max 25 params/evento, 50 custom dims event-scoped
 
 ---
@@ -302,15 +341,30 @@ get_ga4_findings_from_state()  # hallazgos GA4 para análisis cruzado
 
 ---
 
-### 5.4 Web Analyzer Agent ⚠️
+### 5.4 Web Analyzer Agent ✅
 **Archivo**: [agents/web_analyzer_agent/agent.py](agents/web_analyzer_agent/agent.py)
-**Modelo**: `gemini-2.5-flash`
-**Rol**: Genera el `ideal_spec` — configuración de tracking óptima para el cliente específico. Detecta estado actual del sitio.
+**Modelo**: `gemini-2.5-flash` | `output_key="ideal_spec"` (su respuesta se guarda sola en state)
+**Rol**: Genera el `ideal_spec` — configuración de tracking óptima para el cliente específico — y detecta el estado actual del tracking del sitio con un browser real.
 
-**Estado actual**: `tools=[]` — Playwright tools pendientes. Opera en **modo inferencia**:
-- Usa contexto del negocio (tipo, URL, conversiones clave) provisto por Planner
-- Marca toda salida con `"crawl_method": "inferido"` cuando no hay Playwright
-- El Planner enriquece el contexto con Brave Search antes de llamar este agente
+**Arquitectura en dos capas (en producción)**: el agente corre en Agent Engine (sandbox Python puro, sin Chromium); el browser headless corre en el **Playwright Service** en Cloud Run (`playwright_service/` — ver sección 4). Las tools hacen HTTP POST al servicio.
+
+**Tools implementadas** ([agents/web_analyzer_agent/tools/playwright_tools.py](agents/web_analyzer_agent/tools/playwright_tools.py)):
+```python
+screenshot_site(url)   # POST /screenshot — screenshot PNG + elementos interactivos (botones, forms, links)
+analyze_site(url, business_type, key_conversions)
+                       # POST /analyze — GTM container IDs, GA4 measurement IDs,
+                       #                 eventos del dataLayer, errores de tracking
+crawl_site(url)        # POST /crawl_site — home + hasta 6 páginas internas priorizadas
+                       #                    por señales de conversión (usada por el Planner en Paso 1)
+```
+El agente usa `tools=[screenshot_site, analyze_site]`; `crawl_site` y `screenshot_site` también
+están registradas directamente en el Planner para la investigación del Paso 1.
+Si el Playwright Service no responde, las tools devuelven `crawl_method: "error"` y el agente
+cae a **modo inferencia** (marca la salida con `"crawl_method": "inferido"`).
+
+**Por qué Playwright y no HTTP requests simples**: los sitios modernos renderizan con
+JavaScript (React/Angular/Next.js). GTM se carga via `<script>`, `window.dataLayer` se puebla
+en runtime y Consent Mode v2 solo es visible en un browser real.
 
 **Output requerido** (JSON siempre, dos secciones):
 ```json
@@ -321,7 +375,7 @@ get_ga4_findings_from_state()  # hallazgos GA4 para análisis cruzado
     "consent_mode_v2": true,
     "events_found": [...],
     "errors_found": [...],
-    "crawl_method": "inferido"
+    "crawl_method": "playwright_real | inferido"
   },
   "ideal_spec": {
     "business_type": "ecommerce",
@@ -335,123 +389,14 @@ get_ga4_findings_from_state()  # hallazgos GA4 para análisis cruzado
 }
 ```
 
-**Playwright tools — pendientes** (para cuando se construya el servicio):
-```python
-# tools/playwright_tools.py — por crear
-analyze_site(url, business_type, conversions)    # HTTP POST → Playwright Service
-crawl_conversion_funnel(url, funnel_pages)
-check_consent_mode(url)
-```
-
 ---
 
-### 5.4 Web Analyzer Agent
-**Archivo**: `agents/web_analyzer_agent/agent.py`
-**Rol**: Orquestar el análisis del sitio web del cliente. El agente corre en Agent Runtime; el browser headless corre en el Playwright Service (Cloud Run separado).
-
-**Por qué Playwright y no HTTP requests simples**:
-Los sitios modernos renderizan con JavaScript (React, Angular, Next.js). Un HTTP request solo ve HTML estático — sin GA4, sin GTM, sin dataLayer. Se necesita un browser real porque:
-- GTM se carga via `<script>` que ejecuta JavaScript
-- El `window.dataLayer` se puebla en runtime del browser
-- Los eventos de conversión (purchase, add_to_cart) se disparan en interacciones reales
-- Consent Mode v2 se configura antes del primer tag — solo visible en browser
-
-**Arquitectura en dos capas (DEFINITIVA)**:
-
-```
-Web Analyzer Agent (Agent Runtime)
-    ↓ tool call: analyze_site(url)
-    ↓ HTTP POST https://playwright-service-xxxx.run.app/analyze
-Playwright Service (Cloud Run + Docker + Chromium)
-    → Lanza browser headless
-    → Navega el sitio
-    → Captura dataLayer, network requests, IDs
-    → Devuelve JSON al agente
-```
-
-**Tools del agente** (llaman al Playwright Service via HTTP):
-```python
-@tool
-def analyze_site(url: str) -> dict:
-    """Analiza el sitio completo: GTM ID, GA4 ID, dataLayer, errores de tracking."""
-
-@tool
-def crawl_conversion_funnel(url: str, funnel_pages: list[str]) -> dict:
-    """Navega el funnel de compra y detecta eventos en cada paso."""
-
-@tool
-def check_consent_mode(url: str) -> dict:
-    """Verifica si Consent Mode v2 está implementado correctamente."""
-```
-
-**Playwright Service — `playwright_service/`**:
-```
-playwright_service/
-├── Dockerfile           ← imagen base mcr.microsoft.com/playwright/python
-├── app.py               ← FastAPI con endpoints /analyze, /crawl, /health
-└── requirements.txt     ← fastapi, uvicorn, playwright
-```
-
-**Dockerfile**:
-```dockerfile
-FROM mcr.microsoft.com/playwright/python:v1.59.0-noble
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY app.py .
-EXPOSE 8080
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
-```
-
-**Deploy del Playwright Service**:
-```bash
-# Build y push a Container Registry
-docker build -t gcr.io/grapez-hackathon/playwright-service ./playwright_service
-docker push gcr.io/grapez-hackathon/playwright-service
-
-# Deploy a Cloud Run — mínimo 2Gi RAM (Chromium lo requiere)
-gcloud run deploy playwright-service \
-  --image=gcr.io/grapez-hackathon/playwright-service \
-  --region=us-central1 \
-  --memory=2Gi \
-  --timeout=120 \
-  --allow-unauthenticated
-# Guarda la URL en .env: PLAYWRIGHT_SERVICE_URL=https://playwright-service-xxxx.run.app
-```
-
-**Estructura de carpeta**:
-```
-agents/web_analyzer_agent/
-├── agent.py                 ← LlmAgent con tools que llaman al servicio HTTP
-└── tools/
-    └── playwright_tools.py  ← @tool functions que hacen HTTP POST al servicio
-playwright_service/          ← microservicio independiente (NO es un agente ADK)
-├── Dockerfile
-├── app.py
-└── requirements.txt
-```
-
----
-
-### 5.5 Implementation Agent
-**Archivo**: `agents/implementation_agent/agent.py`
-**Rol**: Toma el plan generado por Planner Agent y ejecuta cada acción, paso a paso, con confirmación del consultor antes de cada cambio destructivo o irreversible.
-
-**Principio fundamental**: NUNCA ejecuta cambios en GTM sin crear primero un nuevo workspace. NUNCA publica directamente — siempre crea versión de borrador para revisión humana.
-
-**Herramientas**:
-- Todas las herramientas `write` de GA4 Agent, GTM Agent, Ads Agent
-- `request_confirmation(action_description, impact_level)` — pausa y pide OK al consultor via A2UI
-- `create_rollback_snapshot(agent, client_id)` — guarda estado actual antes de implementar
-- `log_action(action, result, client_id)` — persiste log en Firestore
-
-**Flujo de implementación**:
-1. Recibe lista de acciones ordenadas por prioridad
-2. Por cada acción: muestra descripción + impacto via A2UI → espera confirmación
-3. Ejecuta la acción via API
-4. Verifica que se aplicó correctamente
-5. Loguea resultado
-6. Continúa con la siguiente acción
+### 5.5 Implementation Agent — ❌ DESCARTADO
+No existe como agente separado. Las operaciones write viven directamente en GA4 Agent y
+GTM Agent, protegidas por el flag `implementation_confirmed` que solo `confirm_action()`
+del Planner puede activar (una confirmación = una operación). El protocolo de workspace
+GTM (nunca tocar Default Workspace, crear versión borrador, no publicar sin aprobación)
+está enforced en la instruction y las tools del GTM Agent.
 
 ---
 
@@ -494,8 +439,11 @@ from .tools.ga4_admin_tools import (
 from .tools.ga4_data_tools import get_event_count_last_30_days
 
 root_agent = LlmAgent(
-    model="gemini-3.5-flash",
+    model="gemini-2.5-flash",
     name="ga4_agent",
+    # ADK guarda la respuesta final en session.state["ga4_findings"] — evita que el
+    # Planner copie el diagnóstico como argumento de tool (rompe el function calling)
+    output_key="ga4_findings",
     description="Especialista en diagnóstico y configuración de Google Analytics 4.",
     instruction="""
 Cuando diagnoses una propiedad GA4:
@@ -513,16 +461,15 @@ Cuando diagnoses una propiedad GA4:
 )
 ```
 
-### Patrón de tool con FunctionTool (@tool decorator)
+### Patrón de tool (ADK 2.x — plain function, sin @tool decorator)
 
 ```python
 # agents/ga4_agent/tools/ga4_admin_tools.py
-from google.adk.tools import tool, ToolContext
+from google.adk.tools import ToolContext
 from google.analytics.admin import AnalyticsAdminServiceClient
 from google.oauth2.credentials import Credentials
 import os
 
-@tool
 def list_properties(account_id: str, tool_context: ToolContext) -> dict:
     """
     Lista todas las propiedades GA4 de una cuenta.
@@ -549,75 +496,54 @@ def list_properties(account_id: str, tool_context: ToolContext) -> dict:
     return {"properties": [{"id": p.name, "display_name": p.display_name} for p in props]}
 ```
 
-### Patrón del Planner Agent (orquestador con AgentTool + ParallelAgent)
+### Patrón del Planner Agent (orquestador con AgentTool) — versión simplificada del real
 
 ```python
-# agents/planner_agent/agent.py
-from google.adk.agents import LlmAgent, SequentialAgent, ParallelAgent
-from google.adk.tools import agent_tool, ToolContext
-from google.cloud import firestore
-from cryptography.fernet import Fernet
-import os
+# agents/planner_agent/agent.py (extracto — ver el archivo real para la instruction completa)
+from google.adk.agents import LlmAgent
+from google.adk.tools.agent_tool import AgentTool
+from google.adk.tools import ToolContext
 
 # Importar los sub-agentes ya construidos
 from agents.ga4_agent.agent import root_agent as ga4_agent
 from agents.gtm_agent.agent import root_agent as gtm_agent
 from agents.web_analyzer_agent.agent import root_agent as web_analyzer_agent
-from agents.implementation_agent.agent import root_agent as impl_agent
 
 # Envolver como AgentTools para llamada explícita y controlada
-ga4_tool = agent_tool.AgentTool(agent=ga4_agent)
-gtm_tool = agent_tool.AgentTool(agent=gtm_agent)
-web_tool = agent_tool.AgentTool(agent=web_analyzer_agent)
-impl_tool = agent_tool.AgentTool(agent=impl_agent)
+ga4_tool = AgentTool(agent=ga4_agent)
+gtm_tool = AgentTool(agent=gtm_agent)
+web_analyzer_tool = AgentTool(agent=web_analyzer_agent)
 
-@tool
-def load_client_tokens(client_id: str, tool_context: ToolContext) -> dict:
-    """Carga y descifra los tokens OAuth del cliente desde Firestore."""
-    db = firestore.Client()
-    doc = db.collection("clients").document(client_id).collection("google_tokens").document("current").get()
-    if not doc.exists:
-        return {"error": "Cliente no conectado. Solicita al consultor que conecte la cuenta Google."}
-
-    fernet = Fernet(os.environ["ENCRYPTION_KEY"].encode())
-    data = doc.to_dict()
-    access_token = fernet.decrypt(data["access_token"].encode()).decode()
-    refresh_token = fernet.decrypt(data["refresh_token"].encode()).decode()
-
-    # Guardar en session.state para que todos los sub-agentes los lean via ToolContext
+def load_client_tokens(access_token: str, refresh_token: str, tool_context: ToolContext,
+                       token_expiry: float = 0.0) -> dict:
+    """Carga los tokens OAuth en session.state (solo desarrollo local —
+    en producción llegan via initialState desde el frontend)."""
     tool_context.state["access_token"] = access_token
     tool_context.state["refresh_token"] = refresh_token
-    tool_context.state["client_id"] = client_id
+    if token_expiry > 0:
+        tool_context.state["token_expiry"] = token_expiry
     return {"status": "tokens_loaded"}
 
 root_agent = LlmAgent(
-    model="gemini-3.5-flash",
+    model="gemini-2.5-flash",
     name="planner_agent",
     description="Orquestador del ecosistema de medición de Grapez Studio.",
-    instruction="""
-Eres el coordinador del ecosistema de medición de Grapez Studio.
-
-Al recibir un objetivo:
-1. Llama load_client_tokens(client_id) para cargar credenciales en sesión
-2. Activa diagnóstico en paralelo: ga4_tool, gtm_tool, web_tool
-3. Consolida hallazgos y genera plan de acción con A2UI (tabla de diagnóstico)
-4. Presenta plan al consultor y espera confirmación explícita
-5. Solo después de confirmación: activa impl_tool para ejecutar cambios
-
-NUNCA implementes cambios sin confirmación explícita del consultor.
-""",
-    tools=[load_client_tokens, ga4_tool, gtm_tool, web_tool, impl_tool],
+    instruction="...",  # flujo de 5 pasos — ver agents/planner_agent/agent.py
+    tools=[
+        get_session_info, load_client_tokens, set_business_context, set_audit_mode,
+        confirm_action, screenshot_site, crawl_site,
+        ga4_tool, gtm_tool, web_analyzer_tool, brave_web_search,
+    ],
 )
 ```
 
-### Por qué @tool functions en vez de code execution
+### Por qué plain function tools en vez de code execution
 
-Los MCP servers disponibles para GA4/GTM/Ads son **solo lectura** por defecto. Necesitamos escritura:
+Los MCP servers disponibles para GA4/GTM son **solo lectura** por defecto. Necesitamos escritura:
 - GA4 Admin API con scope `analytics.edit` — crear conversiones, dimensiones, audiencias
 - GTM API v2 con scope `tagmanager.edit.containers` — crear tags, triggers, publicar borradores
-- Google Ads API con scope `adwords` — crear conversiones, vincular propiedades
 
-Usando `@tool` functions normales de ADK, los agentes llaman las librerías Python oficiales de Google con los tokens del cliente desde `ToolContext.state`. No se necesita `UnsafeLocalCodeExecutor` ni code execution.
+Usando plain function tools de ADK, los agentes llaman las librerías Python oficiales de Google con los tokens del cliente desde `ToolContext.state`. No se necesita `UnsafeLocalCodeExecutor` ni code execution.
 
 ---
 
@@ -629,7 +555,7 @@ A2UI es un **protocolo open-source real de Google** (repo: `github.com/google/A2
 
 **Lo que NO existe**: Paquete npm `@google/a2ui` para React. El renderer oficial de React está en roadmap pero no publicado. El renderer disponible es para Lit (Web Components) y Flutter.
 
-**Decisión para este proyecto**: Implementar un **renderer custom en React/Next.js** que siga el contrato JSON de A2UI. Es ~200 líneas de código total para los 4 componentes que necesitamos. No dependemos de un paquete externo que puede cambiar.
+**Decisión para este proyecto**: Implementar un **renderer custom en React/Next.js** que siga el contrato JSON de A2UI — 6 componentes implementados (table, action_card, progress, summary_card, choice_card, image_card). No dependemos de un paquete externo que puede cambiar.
 
 ### Contrato JSON A2UI (spec v0.9 — lo que devuelve el agente)
 
@@ -683,56 +609,37 @@ El agente incluye un bloque JSON en su respuesta. El frontend lo detecta por el 
 }
 ```
 
-### Implementación: renderer custom en Next.js + Tailwind
+### Implementación: renderer custom en Next.js + Tailwind (✅ en producción — 6 tipos)
 
 ```
 frontend/components/a2ui/
 ├── A2UIRenderer.tsx     ← dispatcher: lee "type" y renderiza el componente correcto
 ├── DiagnosisTable.tsx   ← type: "table"
-├── ActionCard.tsx       ← type: "action_card" con botón Confirmar/Cancelar
+├── ActionCard.tsx       ← type: "action_card" con botones Confirmar/Omitir
 ├── ProgressBar.tsx      ← type: "progress"
-└── SummaryCard.tsx      ← type: "summary_card"
+├── SummaryCard.tsx      ← type: "summary_card"
+├── ChoiceCard.tsx       ← type: "choice_card" — opciones clicables (modo, conversiones, scope)
+└── ImageCard.tsx        ← type: "image_card" — screenshots del sitio (Playwright Service)
 ```
 
-**A2UIRenderer.tsx** (dispatcher principal):
+**A2UIRenderer.tsx** (dispatcher real):
 ```tsx
 // frontend/components/a2ui/A2UIRenderer.tsx
-import { DiagnosisTable } from "./DiagnosisTable";
-import { ActionCard } from "./ActionCard";
-import { ProgressBar } from "./ProgressBar";
-import { SummaryCard } from "./SummaryCard";
-
-interface A2UIProps {
-  component: Record<string, unknown>;
-  onAction?: (actionId: string) => void;
-}
-
-export function A2UIRenderer({ component, onAction }: A2UIProps) {
+export function A2UIRenderer({ component, onConfirm, onCancel, onChoice }: A2UIRendererProps) {
   switch (component.type) {
-    case "table":       return <DiagnosisTable data={component} />;
-    case "action_card": return <ActionCard data={component} onAction={onAction} />;
-    case "progress":    return <ProgressBar data={component} />;
-    case "summary_card": return <SummaryCard data={component} />;
-    default:            return null;
+    case "table":        return <DiagnosisTable data={component} />
+    case "action_card":  return <ActionCard data={component} onConfirm={onConfirm} onCancel={onCancel} />
+    case "progress":     return <ProgressBar data={component} />
+    case "summary_card": return <SummaryCard data={component} />
+    case "choice_card":  return <ChoiceCard data={component} onChoice={onChoice} />
+    case "image_card":   return <ImageCard data={component} />
   }
 }
 ```
 
-**Cómo el frontend detecta mensajes A2UI**:
-```tsx
-// En ChatClient.tsx — al recibir un mensaje del agente
-function parseAgentMessage(text: string): { text?: string; a2ui?: object } {
-  // El agente envuelve el JSON en un bloque: ```json ... ```
-  const match = text.match(/```json\n([\s\S]*?)\n```/);
-  if (match) {
-    try {
-      const parsed = JSON.parse(match[1]);
-      if (parsed.__a2ui) return { a2ui: parsed };
-    } catch {}
-  }
-  return { text };
-}
-```
+**Cómo el frontend detecta mensajes A2UI**: [frontend/lib/parse-a2ui.ts](frontend/lib/parse-a2ui.ts)
+extrae los bloques ```` ```json ```` con `"__a2ui": true` del texto del agente (soporta múltiples
+bloques por mensaje y bloques incompletos durante el streaming).
 
 ### Cómo el agente genera los componentes A2UI
 
@@ -756,9 +663,15 @@ Cuando necesites confirmación del consultor, usa action_card con requires_confi
 
 ---
 
-## 8. Base de Datos — Firestore
+## 8. Base de Datos — Firestore ❌ NO SE USA
 
-### Colecciones
+> **Decisión final (junio 2026)**: Firestore y Secret Manager quedaron **fuera del sistema**.
+> No hay base de datos: los tokens OAuth y los clientes creados por el consultor viven en la
+> cookie cifrada de iron-session (ver secciones 9, 19.8 y 19.13). Ningún código del repo
+> invoca Firestore ni Secret Manager. Esta sección se conserva solo como **referencia de
+> diseño** por si en el futuro se necesita persistencia multi-usuario — no es trabajo pendiente.
+
+### Colecciones (diseño de referencia, no implementado)
 ```
 clients/
   {clientId}/
@@ -782,10 +695,10 @@ clients/
         status: "active" | "completed"
 ```
 
-### Encriptación de tokens
-Los tokens OAuth DEBEN estar encriptados en Firestore. Usar `google-cloud-kms` o `cryptography` (Fernet) con key almacenada en Secret Manager.
-
-**Al construir**: investigar el patrón de encriptación de secrets en Google Cloud para tokens OAuth.
+### Encriptación de tokens (solo si algún día se implementa Firestore)
+Si se llegara a persistir tokens OAuth en Firestore, DEBEN ir encriptados (Fernet o Cloud KMS),
+nunca en texto plano. Hoy no aplica: los tokens solo existen en la cookie iron-session, que ya
+va cifrada.
 
 ---
 
@@ -804,6 +717,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/analytics.edit",
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/tagmanager.edit.containers",
+    "https://www.googleapis.com/auth/tagmanager.edit.containerversions",  # create_version
     "https://www.googleapis.com/auth/tagmanager.publish",
     "openid",
     "email",
@@ -890,18 +804,24 @@ def inject_local_tokens(tool_context: ToolContext) -> None:
     tool_context.state["client_id"] = "tiendademo"
 ```
 
-```bash
-# Generar tokens de prueba reales una sola vez (Mauro ejecuta esto):
-python scripts/generate_test_tokens.py
-# Copia TEST_ACCESS_TOKEN y TEST_REFRESH_TOKEN al .env de Juan Camilo
-```
+Los tokens de prueba se generan en el navegador con `frontend/app/dev/tokens` (corre el
+frontend local, autentica con OAuth y copia los tokens al `.env` como TEST_ACCESS_TOKEN /
+TEST_REFRESH_TOKEN).
 
-### Para producción post-hackathon
-Reemplazar iron-session con Firestore + Fernet encryption (schema en sección 8). Los tokens en Firestore **siempre encriptados con Fernet — NUNCA en texto plano**.
+### Persistencia futura (solo referencia)
+iron-session es la solución definitiva del sistema actual. Si algún día se necesita
+persistencia multi-usuario de tokens, el diseño de referencia (Firestore + Fernet) está en
+la sección 8 — hoy no es trabajo pendiente.
 
 ---
 
 ## 10. Skills ADK — Proceso de Descubrimiento
+
+> **Estado final**: los agentes ya están construidos y este proceso quedó **cerrado**.
+> No se integró ninguna skill de MCP Market (la candidata `analytics-tracking` se descartó —
+> ver 19.9). El conocimiento de dominio vive en `agents/shared/prompts.py` y en la skill
+> custom `skills/grapez-analytics-standards/SKILL.md`. Esta sección se conserva como
+> referencia del proceso.
 
 ### Qué son las skills en ADK
 Las skills son unidades de conocimiento + herramientas empaquetadas que se cargan dinámicamente en el agente via `SkillToolset`. Cada skill tiene un `SKILL.md` con:
@@ -975,122 +895,105 @@ El demo del video NO puede usar datos reales de clientes (privacidad). Estrategi
 
 ## 12. Variables de Entorno
 
+> Estado real del `.env` (raíz, gitignored). El frontend tiene además `frontend/.env.local`
+> (desarrollo) y `frontend/.env.cloudrun.yaml` (producción Cloud Run — lo lee `deploy-frontend.ps1`).
+
 ```bash
 # .env (gitignored — copiar de .env.example)
 
 # Google Cloud
-GOOGLE_CLOUD_PROJECT=grapez-hackathon
-GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+GOOGLE_CLOUD_PROJECT=grapez-ecosistema-medicion
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_GENAI_USE_VERTEXAI=true   # sin esto ADK pide GOOGLE_API_KEY y falla
 
 # Google OAuth (para conectar cuentas de clientes)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 OAUTH_REDIRECT_URI=http://localhost:3000/api/oauth/google/callback
 
-# Gemini Enterprise Agent Platform (Agent Runtime)
-AGENT_RUNTIME_REGION=us-central1
-AGENT_RUNTIME_PROJECT=grapez-hackathon
+# Vertex AI Agent Engine (donde corren los agentes)
+AGENT_ENGINE_REGION=us-central1
+AGENT_ENGINE_PROJECT=grapez-ecosistema-medicion
+PLANNER_AGENT_ENGINE_ID=   # lo devuelve scripts/deploy-agents.ps1 en el primer deploy
 
-# Gemini
-GOOGLE_GEMINI_API_KEY=  # si se usa directo (no Vertex)
-
-# Firestore
-FIRESTORE_DATABASE=(default)
-
-# Encryption (para tokens OAuth)
-ENCRYPTION_KEY=  # Fernet key, generar con: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Microservicios Cloud Run
+PLAYWRIGHT_SERVICE_URL=    # https://playwright-service-....run.app
+BRAVE_MCP_URL=             # https://brave-mcp-server-....run.app/mcp
+BRAVE_API_KEY=             # fallback directo a Brave API en desarrollo local
 
 # Frontend
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# OAuth Session (iron-session)
-SESSION_SECRET=  # mín. 32 chars — generar con: openssl rand -base64 32
+SESSION_SECRET=            # iron-session — mín. 32 chars: openssl rand -base64 32
 
 # Tokens de prueba para desarrollo local de agentes (no producción)
-# Generar con: python scripts/generate_test_tokens.py
+# Generar en el navegador con frontend/app/dev/tokens
 TEST_ACCESS_TOKEN=
 TEST_REFRESH_TOKEN=
+
+# Demo (cuentas de prueba para el video)
+DEMO_GTM_ACCOUNT_ID=
+DEMO_GTM_CONTAINER_ID=
+DEMO_WEBSITE_URL=
 ```
+
+> `FIRESTORE_DATABASE` y `ENCRYPTION_KEY` pueden seguir presentes en `.env` por herencia
+> pero **ningún código las usa** (Firestore/Secret Manager descartados — sección 8).
+> `scripts/deploy-agents.ps1` las excluye del paquete que sube a Agent Engine.
 
 ---
 
-## 13. Deploy en Google Cloud
+## 13. Deploy en Google Cloud — ✅ TODO DEPLOYADO
 
-### Servicios GCP usados
-| Servicio | Para qué | Costo estimado |
+> Proyecto GCP: `grapez-ecosistema-medicion` | Región: `us-central1`
+> El deploy se hace con los **scripts en `scripts/`** — no a mano. Si cambias código de
+> agentes, corre `deploy-agents.ps1 -UpdateExisting`; si cambias frontend, `deploy-frontend.ps1`.
+
+### Servicios GCP en producción
+| Servicio | Qué corre | Estado |
 |---|---|---|
-| Agent Runtime (Gemini Enterprise) | Hosting de los 5 agentes Python | Incluido en $500 crédito hackathon |
-| Cloud Run | Frontend Next.js + Playwright Service | ~$5/mes |
-| Firestore | Base de datos (clientes, tokens, logs) | Free tier generoso |
-| Secret Manager | ENCRYPTION_KEY, GOOGLE_CLIENT_SECRET | ~$0.06/secret/mes |
-| Container Registry | Imagen Docker del Playwright Service | ~$0.10/GB/mes |
+| Vertex AI Agent Engine | Los 4 agentes (un solo deploy del Planner que importa los sub-agentes) — ID `4586839804418719744` | ✅ |
+| Cloud Run `grapez-frontend` | Next.js 16 (source deploy con buildpacks) — `https://grapez-frontend-hgsyggbcaq-uc.a.run.app` | ✅ |
+| Cloud Run `playwright-service` | FastAPI + Chromium (Docker, 2Gi RAM) — `https://playwright-service-hgsyggbcaq-uc.a.run.app` | ✅ |
+| Cloud Run `brave-mcp-server` | MCP server propio de Brave Search — `https://brave-mcp-server-hgsyggbcaq-uc.a.run.app` | ✅ |
+| Cloud Trace | Observabilidad de los agentes (deploy con `--trace_to_cloud`) | ✅ |
 
-### APIs a habilitar en GCP
-```bash
-gcloud services enable aiplatform.googleapis.com
-gcloud services enable analyticsadmin.googleapis.com
-gcloud services enable tagmanager.googleapis.com
-gcloud services enable firestore.googleapis.com
-gcloud services enable run.googleapis.com
-gcloud services enable containerregistry.googleapis.com
-gcloud services enable cloudresourcemanager.googleapis.com
+> Firestore y Secret Manager **no se usan** (sección 8).
+
+### 1. Agentes → `scripts/deploy-agents.ps1`
+```powershell
+.\scripts\deploy-agents.ps1                  # primer deploy — crea Agent Engine nuevo
+.\scripts\deploy-agents.ps1 -UpdateExisting  # actualiza el Agent Engine de PLANNER_AGENT_ENGINE_ID
+```
+Qué hace: empaqueta `agents/` + `agent.py` + `requirements.txt` en un temp limpio (sin `.git`,
+que rompe el deploy de ADK en Windows), genera un `.env` filtrado solo con las variables que
+el agente necesita en runtime (excluye frontend/dev/Firestore), y ejecuta
+`adk deploy agent_engine` con `--trace_to_cloud`. Tarda 5-10 minutos.
+
+### 2. Frontend → `scripts/deploy-frontend.ps1`
+```powershell
+.\scripts\deploy-frontend.ps1
+```
+Qué hace: `gcloud run deploy grapez-frontend --source .` desde `frontend/` con las variables
+de `frontend/.env.cloudrun.yaml`. Si agregas una env var al frontend: agrégala a
+`.env.local` (dev) Y a `.env.cloudrun.yaml` (prod), luego corre el script.
+
+### 3. Playwright Service (solo si cambia `playwright_service/`)
+```powershell
+gcloud run deploy playwright-service --source .\playwright_service --region=us-central1 --project=grapez-ecosistema-medicion --memory=2Gi --timeout=120 --allow-unauthenticated
 ```
 
-### 1. Deploy Playwright Service (primero — los agentes dependen de su URL)
-```bash
-# Build y push imagen Docker
-docker build -t gcr.io/grapez-hackathon/playwright-service ./playwright_service
-docker push gcr.io/grapez-hackathon/playwright-service
-
-# Deploy a Cloud Run — 2Gi RAM mínimo para Chromium
-gcloud run deploy playwright-service \
-  --image=gcr.io/grapez-hackathon/playwright-service \
-  --region=us-central1 \
-  --memory=2Gi \
-  --timeout=120 \
-  --allow-unauthenticated
-
-# Copiar la URL al .env:
-# PLAYWRIGHT_SERVICE_URL=https://playwright-service-xxxx-uc.a.run.app
+### 4. Brave MCP Server (solo si cambia `brave_mcp_server/`)
+```powershell
+gcloud run deploy brave-mcp-server --source .\brave_mcp_server --region=us-central1 --project=grapez-ecosistema-medicion
 ```
+Autenticado con OIDC: la tool `brave_web_search` obtiene un identity token de Google
+automáticamente (funciona en Agent Engine, Cloud Run y local con ADC).
 
-### 2. Deploy agentes a Agent Runtime (Gemini Enterprise Agent Platform)
-```bash
-# Habilitar APIs necesarias
-gcloud services enable aiplatform.googleapis.com cloudresourcemanager.googleapis.com
-
-# Instalar Agents CLI si no está instalado
-pip install google-agents-cli   # o: uvx google-agents-cli setup
-
-# Deploy usando Agents CLI (reemplaza adk deploy agent_engine)
-agents-cli deploy \
-  --project=grapez-hackathon \
-  --region=us-central1
-
-# Registrar en Gemini Enterprise Agent Platform
-agents-cli publish gemini-enterprise \
-  --display_name="Grapez Planner Agent"
-
-# Guardar el Agent Runtime ID en .env:
-# PLANNER_AGENT_RUNTIME_ID=projects/.../locations/us-central1/reasoningEngines/...
-```
-
-### 3. Deploy frontend
-```bash
-# Desde /frontend — Cloud Run con source deploy (sin Dockerfile manual)
-gcloud run deploy grapez-hackathon-frontend \
-  --source . \
-  --region=us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars="NEXT_PUBLIC_APP_URL=https://grapez-hackathon-frontend-xxxx-uc.a.run.app"
-```
-
-### Orden de deploy (importante)
-1. Playwright Service → obtener URL
-2. Actualizar `.env` con `PLAYWRIGHT_SERVICE_URL`
-3. Deploy Planner Agent con `agents-cli deploy` + `agents-cli publish gemini-enterprise` → obtener Agent Runtime ID
-4. Actualizar `.env` con `PLANNER_AGENT_RUNTIME_ID`
-5. Deploy Frontend (ya conoce el Agent Runtime ID)
+### Dependencias entre deploys
+- Los agentes leen `PLAYWRIGHT_SERVICE_URL` y `BRAVE_MCP_URL` de su `.env` empaquetado →
+  si cambian esas URLs, redeploya los agentes con `-UpdateExisting`.
+- El frontend lee `PLANNER_AGENT_ENGINE_ID` de `.env.cloudrun.yaml` → si se crea un Agent
+  Engine nuevo (no update), actualiza el yaml y redeploya el frontend.
 
 ---
 
@@ -1130,71 +1033,63 @@ gcloud run deploy grapez-hackathon-frontend \
 
 **Juan Camilo (Agentes)**:
 - [x] Web Analyzer Agent: instrucciones completas + ideal_spec format + modo inferencia
-- [x] Planner Agent: 9 pasos, AgentTool (GA4+GTM+Web) + Brave Search MCPToolset
+- [x] Planner Agent: flujo de 5 pasos, AgentTool (GA4+GTM+Web) + Brave Search MCP
 - [x] `agents/shared/state_tools.py` + `agents/shared/prompts.py` — contexto cruzado entre agentes
 - [x] Flujo de confirmación: `confirm_action()` → `implementation_confirmed` flag → write tools
 
 ---
 
-### Semana 4 (May 24-30): Deploy + End-to-end — ⚠️ PARCIALMENTE COMPLETADA
+### Semana 4 (May 24-30): Deploy + End-to-end — ✅ COMPLETADA (cerrada en Semana 5)
 
-**Mauro (Infra + Frontend)** — bloqueado por deploy de agentes:
-- [ ] Playwright Service: Docker build + Cloud Run — **requiere primero Playwright tools**
-- [ ] Web Analyzer Agent → switch a HTTP Playwright Service — **bloqueado**
-- [ ] Deploy completo: Agentes → Frontend — **pendiente Semana 5**
-- [ ] Sitio demo en Vercel (tiendademo) — **pendiente**
-- [ ] Flujo completo end-to-end OAuth → Chat → A2UI — **pendiente (agentes no deployados)**
+**Mauro (Infra + Frontend)**:
+- [x] Playwright Service: Docker build + Cloud Run (`playwright-service`)
+- [x] Web Analyzer Agent → HTTP Playwright Service (screenshot_site, analyze_site, crawl_site)
+- [x] Deploy completo: Agentes (Agent Engine) → Frontend (Cloud Run)
+- [x] Flujo completo end-to-end OAuth → Chat → A2UI — **funcionando en producción**
+- [ ] ~~Sitio demo en Vercel (tiendademo)~~ — no se hizo; el demo usa sitios reales
 
 **Juan Camilo (Agentes)**:
 - [ ] ~~Implementation Agent separado~~ — **descartado**; write ops integradas en GA4/GTM Agents directamente
 - [x] GA4 write operations: create_conversion_event, create_custom_dimension, update_data_retention
 - [x] GTM write operations: todos (workspace, tags, triggers, variables, versiones, rename, pause)
 - [x] Flujo de confirmación via A2UI action cards — implementado en Planner + state flag
-- [ ] Logs en Firestore — pendiente (no wired para el demo)
-- [ ] Rollback snapshot Firestore — pendiente
+- [ ] ~~Logs en Firestore~~ — **descartado** (Firestore fuera del sistema — sección 8)
+- [ ] ~~Rollback snapshot Firestore~~ — **descartado**
 
 ---
 
-### Semana 5 (Jun 1-4): Deploy + Submit — 🔴 EN CURSO — 4 DÍAS PARA EL DEADLINE
+### Semana 5 (Jun 1-4): Deploy + Submit
 
-**Crítico (sin esto no hay demo para los jueces)**:
-- [ ] **Deploy: Planner Agent a Agent Runtime** — `agents-cli deploy` + `agents-cli publish gemini-enterprise`
-- [ ] **Conectar frontend al Agent Runtime** — actualizar `PLANNER_AGENT_RUNTIME_ID` en .env + chat/route.ts
-- [ ] **TiendaDemo**: crear GA4 property + GTM container con errores plantados para el video
+**Crítico** — ✅ COMPLETADO:
+- [x] **Deploy: Planner Agent a Agent Engine** — via `scripts/deploy-agents.ps1` (`adk deploy agent_engine`)
+- [x] **Conectar frontend al Agent Engine** — `PLANNER_AGENT_ENGINE_ID` configurado, chat con SSE funcionando
+- [x] **Brave MCP Server propio en Cloud Run** (no estaba planeado — reemplazó al MCPToolset)
 
-**Submission (entregables obligatorios del hackathon)**:
-- [ ] Diagrama de arquitectura PNG en `/architecture/` — **requerido en Devpost**
-- [ ] Repo GitHub **público** (cambiar visibilidad antes del submit)
+**Submission (entregables del hackathon)** — verificar estado en `STATE.md`:
+- [ ] Diagrama de arquitectura PNG en `/architecture/` — directorio aún no existe en el repo
+- [ ] Repo GitHub **público**
 - [ ] README en **inglés** (features, setup, arquitectura)
-- [ ] Descripción Devpost en **inglés** (resumen, features, tecnologías, arquitectura, aprendizajes)
-- [ ] Video demo 1-2 minutos en **inglés o subtítulos en inglés**
-- [ ] Testing instructions en inglés (URL + credenciales si necesario)
+- [ ] Descripción Devpost en **inglés**
+- [ ] Video demo 1-2 minutos en **inglés o subtítulos en inglés** (guión en `docs/demo-script.md`)
+- [ ] Testing instructions en inglés
 - [ ] **Mauro y Juan Camilo** registrados como team members en Devpost for Teams
-- [ ] Submit antes del **5 de junio, 5:00 PM PT**
-
-**Opcional si hay tiempo**:
-- [ ] Playwright Service + tools en Web Analyzer (mejora significativa para el demo)
-- [ ] TiendaDemo sitio web en Vercel para el Web Analyzer
-- [ ] Logs en Firestore
-
-**Deadline final**: 5 de junio 2026, **5:00 PM PT**
 
 ---
 
 ## 15. Estructura de Archivos del Proyecto
 
-> Estado real al 2 junio 2026. ✅ = existe | ❌ = pendiente de crear
+> Estado real al 10 junio 2026. ✅ = existe | ❌ = pendiente de crear
 
 ```
 grapez-hackathon/
 ├── CLAUDE.md              ✅ este archivo
 ├── STATE.md               ✅ log de sesiones y progreso
 ├── README.md              ✅ (inglés pendiente para hackathon)
-├── agent.py               ✅ entry point para adk web
+├── agent.py               ✅ entry point para adk web / adk deploy
 ├── .env                   ✅ gitignored
 ├── .env.example           ✅ template público completo
 ├── .gitignore             ✅
-├── requirements.txt       ✅ 23 dependencias
+├── requirements.txt       ✅ dependencias de los agentes
 ├── service-account.json   ✅ gitignored
 ├── skills-lock.json       ✅
 │
@@ -1205,15 +1100,18 @@ grapez-hackathon/
 │   ├── dev_utils.py       ✅ inject_local_tokens() para desarrollo local
 │   ├── planner_agent/
 │   │   ├── __init__.py    ✅
-│   │   ├── agent.py       ✅ LlmAgent + AgentTool(GA4/GTM/Web) + MCPToolset(Brave)
+│   │   ├── agent.py       ✅ LlmAgent + AgentTool(GA4/GTM/Web) + brave_web_search
+│   │   │                     + screenshot_site/crawl_site directas
 │   │   └── tools/
 │   │       ├── __init__.py ✅
-│   │       └── client_tools.py ✅ 7 tools: get_session_info, load_client_tokens,
-│   │                                      set_business_context, set_audit_mode,
-│   │                                      confirm_action, save_ideal_spec, save_ga4_findings
+│   │       ├── client_tools.py ✅ 5 tools: get_session_info, load_client_tokens,
+│   │       │                              set_business_context, set_audit_mode,
+│   │       │                              confirm_action
+│   │       └── brave_search.py ✅ brave_web_search — cliente MCP per-request
+│   │                              (Streamable HTTP + OIDC) con fallback Brave API directa
 │   ├── ga4_agent/
 │   │   ├── __init__.py    ✅
-│   │   ├── agent.py       ✅ 17 tools implementadas
+│   │   ├── agent.py       ✅ 17 tools | output_key="ga4_findings"
 │   │   └── tools/
 │   │       ├── __init__.py       ✅
 │   │       ├── ga4_admin_tools.py ✅ 13 read + 3 write via google-analytics-admin
@@ -1226,22 +1124,29 @@ grapez-hackathon/
 │   │       └── gtm_tools.py ✅ 10 read + 10 write via google-api-python-client
 │   ├── web_analyzer_agent/
 │   │   ├── __init__.py    ✅
-│   │   ├── agent.py       ✅ instrucciones completas, ideal_spec format, tools=[]
+│   │   ├── agent.py       ✅ tools=[screenshot_site, analyze_site] | output_key="ideal_spec"
 │   │   └── tools/
 │   │       ├── __init__.py         ✅
-│   │       └── playwright_tools.py ❌ pendiente (HTTP POST → Playwright Service)
+│   │       └── playwright_tools.py ✅ screenshot_site, analyze_site, crawl_site
+│   │                                  (HTTP POST → Playwright Service)
 │   └── shared/
 │       ├── __init__.py    ✅
 │       ├── prompts.py     ✅ GA4_STANDARDS, GTM_STANDARDS, A2UI_FORMAT_EXAMPLES,
-│       │                     COMMUNICATION_RULES, SUMMARY_CARD_FORMAT
+│       │                     COMMUNICATION_RULES, SUMMARY_CARD_FORMAT, GRAPEZ_VOICE, etc.
 │       └── state_tools.py ✅ get_ideal_spec_from_state(), get_ga4_findings_from_state()
 │
-├── playwright_service/    ❌ directorio no creado
-│   ├── Dockerfile         ← mcr.microsoft.com/playwright/python
-│   ├── app.py             ← FastAPI: /analyze, /crawl, /health
-│   └── requirements.txt   ← fastapi, uvicorn, playwright
+├── playwright_service/    ✅ deployado en Cloud Run (playwright-service)
+│   ├── Dockerfile         ✅ mcr.microsoft.com/playwright/python:v1.59.0-noble
+│   ├── app.py             ✅ FastAPI: /screenshot, /analyze, /crawl_site,
+│   │                         /screenshots/{id}, /health
+│   └── requirements.txt   ✅ fastapi, uvicorn, playwright
 │
-├── frontend/              ✅ Next.js 15 App Router — construido, no deployado
+├── brave_mcp_server/      ✅ deployado en Cloud Run (brave-mcp-server)
+│   ├── Dockerfile         ✅
+│   ├── server.py          ✅ MCP server (Streamable HTTP) — tool brave_web_search
+│   └── requirements.txt   ✅
+│
+├── frontend/              ✅ Next.js 16 App Router — deployado en Cloud Run (grapez-frontend)
 │   ├── app/
 │   │   ├── layout.tsx            ✅
 │   │   ├── page.tsx              ✅ home: Nuevo análisis CTA + Mis análisis + Demos
@@ -1257,25 +1162,32 @@ grapez-hackathon/
 │   │   │   ├── page.tsx          ✅ genera/copia tokens para testing
 │   │   │   └── CopyButton.tsx    ✅
 │   │   └── api/
-│   │       ├── chat/route.ts         ✅ (❌ Agent Runtime ID no configurado aún)
+│   │       ├── chat/route.ts         ✅ conectado al Agent Engine (streamQuery SSE,
+│   │       │                            undici sin timeouts, refresh proactivo de tokens)
 │   │       ├── clients/route.ts      ✅ POST crea cliente en session; DELETE elimina
 │   │       ├── session/[clientId]/
 │   │       │   └── route.ts          ✅ DELETE resetea sesión ADK del cliente
 │   │       └── oauth/google/
 │   │           ├── start/route.ts    ✅
 │   │           ├── callback/route.ts ✅ iron-session fix: req+response pattern
+│   │           ├── status/route.ts   ✅ 200 con { email } si sesión activa
 │   │           └── logout/route.ts   ✅ iron-session fix: req+response pattern
 │   ├── components/a2ui/
-│   │   ├── A2UIRenderer.tsx   ✅ dispatcher por type
+│   │   ├── A2UIRenderer.tsx   ✅ dispatcher por type (6 tipos)
 │   │   ├── DiagnosisTable.tsx ✅ type: "table"
-│   │   ├── ActionCard.tsx     ✅ type: "action_card" con Confirmar/Cancelar
+│   │   ├── ActionCard.tsx     ✅ type: "action_card" con Confirmar/Omitir
 │   │   ├── ProgressBar.tsx    ✅ type: "progress"
-│   │   └── SummaryCard.tsx    ✅ type: "summary_card"
+│   │   ├── SummaryCard.tsx    ✅ type: "summary_card"
+│   │   ├── ChoiceCard.tsx     ✅ type: "choice_card"
+│   │   └── ImageCard.tsx      ✅ type: "image_card" — screenshots del Playwright Service
 │   ├── lib/
-│   │   ├── mock-clients.ts    ✅ 3 demos con conversaciones completas A2UI + 1 live
+│   │   ├── mock-clients.ts    ✅ demos con conversaciones completas A2UI
 │   │   ├── session.ts         ✅ iron-session: SessionData + StoredClient[] + 24h TTL
-│   │   ├── types.ts           ✅ Client (isDemo, demoConversation), ChatMessage
-│   │   └── parse-a2ui.ts      ✅ extrae bloques JSON A2UI del texto del agente
+│   │   ├── types.ts           ✅ Client (isDemo, demoConversation), ChatMessage, A2UIComponent
+│   │   ├── parse-a2ui.ts      ✅ extrae bloques JSON A2UI (múltiples por mensaje, streaming)
+│   │   ├── normalize-conversation.ts ✅
+│   │   └── render-markdown.tsx ✅ render del markdown del agente en el chat
+│   ├── .env.cloudrun.yaml     ✅ gitignored — env vars de producción (lee deploy-frontend.ps1)
 │   ├── package.json           ✅
 │   └── next.config.ts         ✅
 │
@@ -1284,13 +1196,15 @@ grapez-hackathon/
 │       └── SKILL.md           ✅ estándares custom de Grapez
 │
 ├── demo/
-│   └── reset_demo.py          ✅ (setup_tiendademo_ga4.py y gtm.py ❌ pendientes)
+│   └── reset_demo.py          ✅
 │
 ├── docs/
 │   ├── demo-script.md         ✅ guión del video
 │   └── business-case.md       ✅ para descripción Devpost
 │
-└── scripts/                   ❌ vacío — deploy-agents.sh y deploy-frontend.sh pendientes
+└── scripts/
+    ├── deploy-agents.ps1      ✅ empaqueta agents/ y ejecuta adk deploy agent_engine
+    └── deploy-frontend.ps1    ✅ gcloud run deploy desde frontend/ con .env.cloudrun.yaml
 ```
 
 ---
@@ -1430,14 +1344,15 @@ Esta es la garantía real. El código Python verifica `tool_context.state.get("i
 #### Patrón exacto — copiar al inicio de cada write tool
 
 ```python
-# Copiar este bloque al inicio de TODA función que modifique datos en APIs externas
+# Copiar este bloque al inicio de TODA función que modifique datos en APIs externas.
+# NO consumir el flag aquí: lo consume ConfirmationScopedAgentTool al terminar la
+# invocación del sub-agente — así una acción confirmada puede encadenar varias escrituras.
 if not tool_context.state.get("implementation_confirmed"):
     return {
         "blocked": True,
         "reason": "Operación de escritura bloqueada — requiere confirmación previa del consultor.",
-        "instruction": "El Planner debe llamar confirm_action() después de que el consultor apruebe esta acción. El consultor debe ver un action_card A2UI antes de que se ejecute cualquier cambio.",
+        "instruction": "NO llames confirm_action — no es una tool tuya (pertenece al Planner). Reporta este bloqueo en tu respuesta de texto.",
     }
-tool_context.state["implementation_confirmed"] = False  # consumir el flag — una confirmación = una acción
 ```
 
 #### Flujo de confirmación end-to-end
@@ -1449,12 +1364,14 @@ tool_context.state["implementation_confirmed"] = False  # consumir el flag — u
 3. Consultor ve la card → responde "Confirmo" o "Cancelo"
 4. Planner detecta "Confirmo" → llama confirm_action(action_description="Crear conversión purchase en GA4-123456")
       → confirm_action() setea tool_context.state["implementation_confirmed"] = True
-5. Planner llama ga4_agent o gtm_agent con instrucción específica de implementación
-6. Sub-agente llama la write tool (ej: create_conversion_event)
-7. Write tool verifica implementation_confirmed == True → ejecuta la API call
-8. Write tool resetea implementation_confirmed = False (la confirmación se consume)
-9. Sub-agente reporta resultado al Planner
-10. Planner reporta al consultor → genera siguiente action_card si hay más acciones pendientes
+5. Planner llama ga4_agent o gtm_agent (via ConfirmationScopedAgentTool) con instrucción
+   específica de implementación
+6. Sub-agente encadena las write tools que la acción necesite (ej. GTM: create_workspace
+   → create_variable → create_trigger → create_tag) — todas verifican el flag == True
+7. Al terminar la invocación, ConfirmationScopedAgentTool consume el flag (→ False)
+   — la siguiente acción requiere confirm_action() de nuevo
+8. Sub-agente reporta resultado al Planner
+9. Planner reporta al consultor → genera siguiente action_card si hay más acciones pendientes
 ```
 
 La tool `confirm_action` vive en `agents/planner_agent/tools/client_tools.py`. Solo el Planner la llama — los sub-agentes nunca la invocan directamente.
@@ -1504,15 +1421,14 @@ Reglas del estilo Grapez para incluir en la `instruction` de cada agente:
 
 ### Principios de código
 - Python 3.11+ para agentes; TypeScript strict para frontend
-- Tokens siempre encriptados con Fernet — NUNCA en texto plano en Firestore
-- Logs de todas las acciones de implementación en Firestore bajo `clients/{id}/sessions/{id}/actions`
+- Tokens OAuth NUNCA se persisten fuera de la cookie cifrada de iron-session (no hay base de datos)
 - Manejo de errores explícito — el agente comunica errores en lenguaje natural al consultor
 - Tests mínimos para las tools de escritura (create_conversion_event, create_tag, etc.)
 
 ### Restricciones absolutas (nunca sin aprobación)
-- No cambiar la arquitectura de 5 agentes
-- No usar modelo distinto a `gemini-3.5-flash` (ver sección 19.3)
-- No guardar tokens OAuth sin encriptación Fernet
+- No cambiar la arquitectura de 4 agentes (Planner + GA4 + GTM + Web Analyzer)
+- No usar modelo distinto a `gemini-2.5-flash` (ver sección 19.3 — cambiar a 3.5 cuando llegue al proyecto)
+- No persistir tokens OAuth fuera de la cookie iron-session
 - No publicar versiones de GTM directamente — siempre crear borrador primero
 - No escribir en GA4 Demo Account (solo lectura)
 
@@ -1590,8 +1506,8 @@ Reglas del estilo Grapez para incluir en la `instruction` de cada agente:
 ## 19. Decisiones Técnicas Verificadas
 
 > **Esta sección resuelve todas las deudas técnicas.**
-> Última actualización: **26 de mayo 2026** — ADK 2.1.0, gemini-3.5-flash, sin @tool decorator.
-> Investigación inicial: 11 de mayo 2026.
+> Última actualización: **10 de junio 2026** — ADK 2.1.0, gemini-2.5-flash, sin @tool decorator,
+> todo deployado (Agent Engine + 3 servicios Cloud Run). Investigación inicial: 11 de mayo 2026.
 
 ### 19.1 Google ADK — Versión y Imports
 
@@ -1648,17 +1564,11 @@ def list_properties(...): ...
 
 **Qué es**: El runtime managed para agentes ADK. Antes llamado "Agent Engine" / "Reasoning Engine", ahora es "Agent Runtime" dentro de la **Gemini Enterprise Agent Platform** (renombrado en Google Cloud Next '26, abril 2026). Mismo servicio, nueva marca. Endpoint regional en `us-central1-aiplatform.googleapis.com`.
 
-**Comando de deploy verificado (Agents CLI)**:
-```bash
-# Desde la raíz del proyecto
-agents-cli deploy \
-  --project=grapez-ecosistema-medicion \
-  --region=us-central1
-
-# Registrar en el catálogo de Gemini Enterprise
-agents-cli publish gemini-enterprise \
-  --display_name="Grapez Planner Agent"
-```
+**Deploy real del proyecto** (ver sección 13): `scripts/deploy-agents.ps1`, que ejecuta
+`adk deploy agent_engine` sobre un paquete limpio (sin `.git`) con `.env` filtrado y
+`--trace_to_cloud`. Se eligió sobre `agents-cli deploy` porque funcionó de forma confiable
+en Windows y permite controlar exactamente qué archivos y variables suben al runtime.
+Para actualizar el deploy existente: `.\scripts\deploy-agents.ps1 -UpdateExisting`.
 
 **SSE confirmado**: Soporta streaming nativo via `streamQuery?alt=sse`. El frontend consume el stream directamente.
 
@@ -1686,11 +1596,11 @@ agents-cli publish gemini-enterprise \
 
 ---
 
-### 19.4 Web Analyzer — Playwright en Google Cloud
+### 19.4 Web Analyzer — Playwright en Google Cloud ✅ EN PRODUCCIÓN
 
 **Problema**: Agent Engine no puede correr Playwright/Chromium — es un sandbox Python puro sin procesos de navegador ni Chromium instalado.
 
-**Solución elegida**: Playwright Service como microservicio independiente en Cloud Run con Docker.
+**Solución implementada**: Playwright Service como microservicio independiente en Cloud Run con Docker (`playwright_service/`, servicio `playwright-service`). Endpoints: `/screenshot`, `/analyze`, `/crawl_site`, `/screenshots/{id}`, `/health`. Las tools del Web Analyzer (y del Planner) le hacen HTTP POST via `httpx` usando `PLAYWRIGHT_SERVICE_URL`.
 
 **Por qué Cloud Run y no otras opciones**:
 - GKE: overkill para hackathon, más configuración, más costoso
@@ -1711,7 +1621,7 @@ agents-cli publish gemini-enterprise \
 
 **Lo que NO existe**: Paquete npm `@google/a2ui` para React. El renderer oficial de React está en roadmap pero no publicado a mayo 2026. Renderers disponibles: Lit (Web Components) y Flutter.
 
-**Decisión**: Renderer custom en React/Next.js + Tailwind. ~200 líneas de código para 4 componentes (table, action_card, progress, summary_card). El contrato JSON de A2UI sí está especificado en el repo oficial — nuestro renderer lo implementa directamente.
+**Decisión**: Renderer custom en React/Next.js + Tailwind. 6 componentes implementados (table, action_card, progress, summary_card, choice_card, image_card). El contrato JSON de A2UI sí está especificado en el repo oficial — nuestro renderer lo implementa directamente.
 
 **Cómo mencionar A2UI en el hackathon**: "Implementamos el protocolo A2UI de Google para generar UI dinámica desde el agente." Esto es preciso y técnicamente correcto aunque el renderer sea custom.
 
@@ -1722,17 +1632,16 @@ agents-cli publish gemini-enterprise \
 **Patrón elegido**: `ToolContext.state`
 
 ```python
-# Planner Agent carga tokens al inicio de sesión:
-tool_context.state["access_token"] = descifrar(token_de_firestore)
-tool_context.state["refresh_token"] = descifrar(refresh_de_firestore)
+# El frontend pasa los tokens via initialState al crear la sesión del Agent Engine,
+# o el Planner los carga con load_client_tokens() en desarrollo local:
+tool_context.state["access_token"] = access_token
+tool_context.state["refresh_token"] = refresh_token
 
 # Cada sub-agente los lee en sus tools:
 access_token = tool_context.state.get("access_token")
 ```
 
-**Por qué este patrón**: Es el más directo para el flujo de este proyecto. El OAuth ya ocurre en el frontend Next.js — los tokens llegan cifrados a Firestore. El Planner los carga al inicio de la sesión del agente y los propaga via `session.state` a todos los sub-agentes automáticamente.
-
-**Cifrado de tokens**: Fernet (librería `cryptography`). La `ENCRYPTION_KEY` se guarda en Secret Manager en producción. Para desarrollo local, en `.env` (gitignored).
+**Por qué este patrón**: Es el más directo para el flujo de este proyecto. El OAuth ocurre en el frontend Next.js — los tokens viven en la cookie cifrada de iron-session y llegan al agente via `initialState` en cada sesión de chat (`frontend/app/api/chat/route.ts`, que además refresca el access token proactivamente antes de cada turno). El state los propaga a todos los sub-agentes automáticamente. No hay Firestore ni Fernet — los tokens nunca se persisten fuera de la cookie.
 
 ---
 
@@ -1749,11 +1658,11 @@ access_token = tool_context.state.get("access_token")
 | `SkillToolset` | Por confirmar | Confirmado — `from google.adk.tools import skill_toolset` |
 | Deploy Web Analyzer | Sin definir | Playwright Service en Cloud Run con Docker 2Gi |
 | Deploy agentes | Agentes separados | Un solo deploy del Planner (importa sub-agentes como módulos) |
-| OAuth storage (demo) | Firestore + Fernet | iron-session cookie (demo) → Firestore post-hackathon |
-| MCP integration | Sin definir | analytics-tracking skill via MCP Market (obligatorio Track 1) |
+| OAuth storage | Firestore + Fernet | iron-session cookie — Firestore descartado |
+| MCP integration | Sin definir | **Brave MCP Server propio en Cloud Run** (obligatorio Track 1) |
 | Deadline hora | 11:59 PM PT (incorrecto) | **5:00 PM PT** (reglas oficiales) |
 | Google Ads Agent | Incluido (agente 4 de 6) | **Eliminado** — carga > valor para el hackathon |
-| Deploy tool | `adk deploy agent_engine` | `agents-cli deploy` + `agents-cli publish gemini-enterprise` |
+| Deploy tool | `agents-cli deploy` (planeado) | `adk deploy agent_engine` via `scripts/deploy-agents.ps1` — lo que funcionó en la práctica |
 | Platform naming | "Vertex AI Agent Engine" | "Gemini Enterprise Agent Platform (Agent Runtime)" |
 | Model ID | `gemini-3.5-flash` (era `-preview`) | `gemini-3.5-flash` — GA desde abril 2026 |
 | Agents CLI skills | Sin instalar | **Instaladas en Claude Code** — 7 skills ADK (mayo 14, 2026) |
@@ -1765,19 +1674,21 @@ access_token = tool_context.state.get("access_token")
 
 **Decisión**: Para el demo del hackathon, los tokens OAuth se almacenan en cookie de sesión cifrada (`iron-session`) en lugar de Firestore. El usuario re-autentica cada sesión.
 
-**Por qué**: Elimina ~4 días de desarrollo (Firestore token schema, Fernet encryption, refresh middleware). El resultado demo es más fuerte: los jueces ven el flujo OAuth real con los 5 scopes de Google. La arquitectura de producción (Firestore + Fernet) está documentada en sección 8 y se implementa post-hackathon.
+**Por qué**: Elimina ~4 días de desarrollo (Firestore token schema, Fernet encryption, refresh middleware). El resultado demo es más fuerte: los jueces ven el flujo OAuth real con los 5 scopes de Google. **Actualización junio 2026**: la decisión se volvió definitiva — Firestore quedó fuera del sistema (sección 8 se conserva solo como referencia de diseño).
 
 **Impacto en el Planner Agent**: El `load_client_tokens` en Section 6 (que leía de Firestore) se reemplaza por una versión que recibe `access_token` y `refresh_token` como parámetros pasados desde el frontend via `initialState` del Agent Runtime session.
 
 ---
 
-### 19.9 MCP Strategy — Track 1 Compliance (decisión mayo 12, 2026)
+### 19.9 MCP Strategy — Track 1 Compliance (implementación final, junio 2026)
 
 **Requisito**: Track 1 exige explícitamente MCP. Las reglas dicen: *"Show us how your agent uses the Model Context Protocol (MCP) to securely connect to external tools."*
 
-**Cómo lo satisfacemos**: La skill `analytics-tracking` de MCP Market (borghei, 101 stars) es un MCP server que Juan Camilo integra en los agentes GA4 y GTM via `SkillToolset`. Esto es uso real de MCP para conectar conocimiento especializado de analytics al agente.
+**Cómo lo satisfacemos (implementado)**: Construimos y deployamos **nuestro propio MCP server de Brave Search** en Cloud Run (`brave_mcp_server/` — Streamable HTTP, autenticado con Google OIDC identity tokens). La tool `brave_web_search` del Planner ([agents/planner_agent/tools/brave_search.py](agents/planner_agent/tools/brave_search.py)) abre una `ClientSession` del SDK `mcp` por cada request y llama la tool remota; en desarrollo local sin MCP server, hace fallback HTTP directo a la Brave API con `BRAVE_API_KEY`.
 
-**Cómo documentarlo en Devpost**: "We use the Model Context Protocol (MCP) to load the analytics-tracking skill, which provides our agents with specialized knowledge of GA4 event taxonomy, GTM architecture patterns, and Consent Mode v2 best practices — without hardcoding domain knowledge into agent instructions."
+> El plan original (skill `analytics-tracking` de MCP Market via `SkillToolset`) se **descartó** — el MCP server propio cubre el requisito con más mérito técnico.
+
+**Cómo documentarlo en Devpost**: "We built and deployed our own MCP server (Brave Search over Streamable HTTP on Cloud Run, secured with Google OIDC identity tokens). The Planner Agent connects to it through the MCP Python client to research each client's business context before any diagnostic."
 
 ---
 
@@ -1828,7 +1739,7 @@ agents-cli deploy                                    # deploy a Agent Runtime
 agents-cli publish gemini-enterprise --display_name="Grapez Planner Agent"
 ```
 
-**Impacto en el proyecto**: Reemplaza `adk deploy agent_engine`. Más simple y mejor integrado con la plataforma. Claude Code tiene ahora conocimiento especializado de ADK via las 7 skills.
+**Impacto real en el proyecto**: Las 7 skills de Claude Code sí se usan como conocimiento ADK. El comando `agents-cli deploy`, en cambio, **no terminó usándose** — el deploy en producción se hace con `adk deploy agent_engine` via `scripts/deploy-agents.ps1` (ver 19.2 y sección 13).
 
 #### Agent Studio
 
@@ -1904,13 +1815,30 @@ root_agent = LlmAgent(
 
 Con Vertex AI + billing habilitado los 429 son raros. Este retry es la red de seguridad para picos ocasionales. Si los 429 persisten, solicitar aumento de quota en GCP Console → APIs & Services → Quotas.
 
+**Reintento ante respuestas vacías (junio 10, 2026)**: Gemini 2.5 a veces devuelve un turno
+vacío (sin texto ni function calls, o solo "thoughts") después de un function response grande —
+p. ej. tras el diagnóstico extenso de un AgentTool. ADK lo trata como respuesta final y la
+conversación queda congelada esperando input. Los 4 agentes usan
+`RetryingGemini` ([agents/shared/retrying_gemini.py](agents/shared/retrying_gemini.py)) en vez
+del string del modelo: un subclass de `Gemini` que detecta el intento vacío y relanza la llamada
+hasta 2 veces (las respuestas con contenido se streamean sin buffering, no afecta el SSE):
+
+```python
+from agents.shared.retrying_gemini import RetryingGemini
+
+root_agent = LlmAgent(
+    model=RetryingGemini(model="gemini-2.5-flash"),
+    ...
+)
+```
+
 ---
 
-### 19.13 Client Storage — iron-session cookie para demo → Firestore post-hackathon (junio 2, 2026)
+### 19.13 Client Storage — iron-session cookie (junio 2, 2026; definitivo)
 
-**Decisión**: Los clientes creados por el consultor (nombre, URL, industria) se almacenan en la **cookie de iron-session** (`session.createdClients: StoredClient[]`), no en Firestore.
+**Decisión**: Los clientes creados por el consultor (nombre, URL, industria) se almacenan en la **cookie de iron-session** (`session.createdClients: StoredClient[]`). No hay base de datos — Firestore quedó descartado del sistema (sección 8).
 
-**Por qué**: Elimina la necesidad de configurar Firestore para el demo. El consultor puede crear 10-15 clientes en 24 horas (duración de la cookie) sin ninguna dependencia de base de datos.
+**Por qué**: Elimina la dependencia de base de datos por completo. El consultor puede crear 10-15 clientes en 24 horas (duración de la cookie).
 
 **Limitaciones conocidas**:
 - Cookie: ~4KB máx → ~10-15 clientes máx antes de overflow
@@ -1943,7 +1871,7 @@ export interface SessionData {
 3. Redirect a `/clients/${id}/chat?reset=true`
 4. `chat/page.tsx` resuelve: `mockClients.find()` primero, luego `session.createdClients.find()`, si no → `notFound()`
 
-**Migración a Firestore** (post-hackathon — para Mauro):
+**Migración a Firestore** (solo referencia — NO es trabajo planeado; aplicaría únicamente si el producto escala a multi-usuario persistente):
 
 | Qué cambiar | Dónde | Detalle |
 |---|---|---|
